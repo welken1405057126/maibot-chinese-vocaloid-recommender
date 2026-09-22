@@ -191,6 +191,8 @@ class TrackRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(updated.cover_status, CoverStatus.CACHED)
         self.assertEqual(updated.cover_path, "covers/BV0000000001.jpg")
         self.assertEqual(updated.cover_cached_at, "2026-09-22T12:00:00+00:00")
+        with_cover = await self.repository.list_tracks_with_cover_paths()
+        self.assertEqual([item.id for item in with_cover], [track.id])
 
     async def test_refreshes_stale_video_metadata(self) -> None:
         track = (

@@ -88,6 +88,16 @@ def canonical_video_url(metadata: VideoMetadata) -> str:
     return f"https://www.bilibili.com/video/{metadata.bvid}"
 
 
+def validate_cover_url(url: str) -> str:
+    """Normalize and validate a cover URL before every image request."""
+
+    normalized = url.strip()
+    if normalized.startswith("http://"):
+        normalized = "https://" + normalized.removeprefix("http://")
+    _validate_https_url(normalized, COVER_HOSTS, field="cover_url")
+    return normalized
+
+
 class BilibiliClient:
     """Fetch video metadata from one fixed API with strict network boundaries."""
 
@@ -236,10 +246,7 @@ def parse_video_metadata(payload: Mapping[str, Any]) -> VideoMetadata:
     if _BVID_RE.fullmatch(bvid) is None:
         raise BilibiliResponseError("data.bvid has an invalid format")
 
-    cover_url = _require_str(data.get("pic"), "data.pic")
-    if cover_url.startswith("http://"):
-        cover_url = "https://" + cover_url.removeprefix("http://")
-    _validate_https_url(cover_url, COVER_HOSTS, field="data.pic")
+    cover_url = validate_cover_url(_require_str(data.get("pic"), "data.pic"))
 
     view_count = _require_int(stats.get("view"), "data.stat.view")
     if view_count < 0:

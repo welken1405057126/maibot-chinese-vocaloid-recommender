@@ -69,6 +69,7 @@ class NetworkSectionConfig(PluginConfigBase):
     request_timeout_seconds: float = Field(default=12, description="单次命令的 B 站请求总超时秒数")
     max_redirects: int = Field(default=3, description="b23.tv 短链最多跳转次数")
     metadata_max_bytes: int = Field(default=2 * 1024 * 1024, description="元数据响应最大字节数")
+    max_cover_bytes: int = Field(default=8 * 1024 * 1024, description="单张封面响应最大字节数")
 
 
 class CoverCacheSectionConfig(PluginConfigBase):

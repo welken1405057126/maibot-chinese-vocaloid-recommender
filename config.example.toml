@@ -34,6 +34,8 @@ request_timeout_seconds = 12
 max_redirects = 3
 # 视频元数据响应上限（字节），默认 2 MiB。
 metadata_max_bytes = 2097152
+# 单张封面响应上限（字节），默认 8 MiB。
+max_cover_bytes = 8388608
 
 # 封面缓存配置
 [cover_cache]
@@ -45,5 +47,5 @@ deleted_retention_days = 30
 orphan_retention_days = 7
 # 临时文件的保留小时数。
 temp_retention_hours = 24
-# 缓存总大小上限（MiB），超出后清理。
+# 缓存总大小上限（MiB），超出后优先清理孤儿和软删除曲目的封面。
 max_cache_mib = 256

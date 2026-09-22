@@ -224,6 +224,19 @@ class TrackRepository:
             finally:
                 connection.close()
 
+    async def list_tracks_with_cover_paths(self) -> list[Track]:
+        """Return records that currently claim a local cover file."""
+
+        async with self._lock:
+            connection = self._connect()
+            try:
+                rows = connection.execute(
+                    "SELECT * FROM tracks WHERE cover_path IS NOT NULL ORDER BY id"
+                ).fetchall()
+                return [self._row_to_track(row) for row in rows]
+            finally:
+                connection.close()
+
     async def get_recent_recommendation_ids(self, stream_id: str, limit: int) -> list[int]:
         if limit <= 0:
             return []
