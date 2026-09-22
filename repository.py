@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 try:
@@ -17,6 +17,7 @@ try:
         NewTrack,
         Track,
         TrackStatus,
+        VideoMetadata,
     )
 except ImportError:
     from models import (  # type: ignore[no-redef]
@@ -27,6 +28,7 @@ except ImportError:
         NewTrack,
         Track,
         TrackStatus,
+        VideoMetadata,
     )
 
 
@@ -80,15 +82,10 @@ class TrackRepository:
                             CHECK (cover_status IN ('cached', 'missing', 'failed')),
                         cover_cached_at TEXT,
                         cover_last_accessed_at TEXT,
-                        video_owner_mid TEXT NOT NULL,
-                        video_owner_name TEXT NOT NULL,
-                        duration INTEGER NOT NULL DEFAULT 0,
                         video_state INTEGER NOT NULL DEFAULT 0,
                         view_count INTEGER NOT NULL DEFAULT 0,
-                        like_count INTEGER NOT NULL DEFAULT 0,
                         metadata_refreshed_at TEXT NOT NULL,
                         uploader_id TEXT NOT NULL,
-                        uploader_name TEXT NOT NULL,
                         origin_group_id TEXT,
                         origin_stream_id TEXT NOT NULL,
                         status TEXT NOT NULL DEFAULT 'active'
@@ -158,12 +155,11 @@ class TrackRepository:
                         """
                         INSERT INTO tracks (
                             bvid, aid, canonical_url, title, cover_url, cover_path,
-                            cover_status, cover_cached_at, video_owner_mid,
-                            video_owner_name, duration, video_state, view_count,
-                            like_count, metadata_refreshed_at, uploader_id,
-                            uploader_name, origin_group_id, origin_stream_id,
+                            cover_status, cover_cached_at, video_state,
+                            view_count, metadata_refreshed_at, uploader_id,
+                            origin_group_id, origin_stream_id,
                             status, created_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             metadata.bvid,
@@ -174,15 +170,10 @@ class TrackRepository:
                             new_track.cover_path,
                             new_track.cover_status.value,
                             timestamp if new_track.cover_status is CoverStatus.CACHED else None,
-                            metadata.owner_mid,
-                            metadata.owner_name,
-                            metadata.duration,
                             metadata.state,
                             metadata.view_count,
-                            metadata.like_count,
                             timestamp,
                             new_track.uploader_id,
-                            new_track.uploader_name,
                             new_track.origin_group_id,
                             new_track.origin_stream_id,
                             TrackStatus.ACTIVE.value,
@@ -405,6 +396,68 @@ class TrackRepository:
             finally:
                 connection.close()
 
+    async def update_video_metadata(
+        self,
+        track_id: int,
+        metadata: VideoMetadata,
+        *,
+        now: str | None = None,
+    ) -> Track | None:
+        """Store refreshed display metadata after a successful API response."""
+
+        timestamp = now or utc_now_iso()
+        async with self._lock:
+            connection = self._connect()
+            try:
+                cursor = connection.execute(
+                    """
+                    UPDATE tracks
+                    SET title = ?, cover_url = ?, video_state = ?, view_count = ?,
+                        metadata_refreshed_at = ?
+                    WHERE id = ? AND bvid = ? COLLATE NOCASE AND aid = ?
+                    """,
+                    (
+                        metadata.title,
+                        metadata.cover_url,
+                        metadata.state,
+                        metadata.view_count,
+                        timestamp,
+                        int(track_id),
+                        metadata.bvid,
+                        metadata.aid,
+                    ),
+                )
+                connection.commit()
+                if cursor.rowcount == 0:
+                    return None
+                row = connection.execute(
+                    "SELECT * FROM tracks WHERE id = ?",
+                    (int(track_id),),
+                ).fetchone()
+                return self._row_to_track(row) if row is not None else None
+            finally:
+                connection.close()
+
+    @staticmethod
+    def metadata_is_stale(
+        track: Track,
+        *,
+        max_age_days: int = 2,
+        now: datetime | None = None,
+    ) -> bool:
+        """Return whether Bilibili metadata should be refreshed before display."""
+
+        try:
+            refreshed_at = datetime.fromisoformat(track.metadata_refreshed_at)
+        except ValueError:
+            return True
+        if refreshed_at.tzinfo is None:
+            refreshed_at = refreshed_at.replace(tzinfo=UTC)
+        current_time = now or datetime.now(UTC)
+        if current_time.tzinfo is None:
+            current_time = current_time.replace(tzinfo=UTC)
+        return current_time - refreshed_at >= timedelta(days=max(0, int(max_age_days)))
+
     async def _get_one(self, query: str, params: tuple[object, ...]) -> Track | None:
         async with self._lock:
             connection = self._connect()
@@ -429,15 +482,10 @@ class TrackRepository:
             cover_last_accessed_at=(
                 str(row["cover_last_accessed_at"]) if row["cover_last_accessed_at"] is not None else None
             ),
-            video_owner_mid=str(row["video_owner_mid"]),
-            video_owner_name=str(row["video_owner_name"]),
-            duration=int(row["duration"]),
             video_state=int(row["video_state"]),
             view_count=int(row["view_count"]),
-            like_count=int(row["like_count"]),
             metadata_refreshed_at=str(row["metadata_refreshed_at"]),
             uploader_id=str(row["uploader_id"]),
-            uploader_name=str(row["uploader_name"]),
             origin_group_id=(str(row["origin_group_id"]) if row["origin_group_id"] is not None else None),
             origin_stream_id=str(row["origin_stream_id"]),
             status=TrackStatus(str(row["status"])),

@@ -208,28 +208,30 @@ B 站视频信息接口返回的 `data.pic` 是封面地址。插件需要同时
 
 ### 4.1 `tracks` 曲目表
 
-| 字段 | 用途 |
-| --- | --- |
-| `id` | 自增数字 ID，供删除命令使用 |
-| `bvid` | B 站 BV 号，唯一索引 |
-| `aid` | B 站 AV 号，可为空，存在时也应唯一 |
-| `canonical_url` | 规范化后的 B 站链接 |
-| `title` | 视频标题 |
-| `cover_url` | B 站封面来源地址 |
-| `cover_path` | 本地封面相对路径 |
-| `cover_status` | `cached`、`missing` 或 `failed` |
-| `cover_cached_at` | 最近成功缓存时间 |
-| `cover_last_accessed_at` | 最近推荐读取时间 |
-| `video_owner_name` | B 站投稿者名称，仅展示/审计 |
-| `video_owner_mid` | B 站投稿者 UID，仅审计 |
-| `uploader_id` | QQ 上传者 ID，权限判断依据 |
-| `uploader_name` | 上传时昵称，仅展示，不用于权限判断 |
-| `origin_group_id` | 来源群；私聊上传时为空 |
-| `origin_stream_id` | 来源聊天流 |
-| `status` | `active` 或 `deleted` |
-| `created_at` | 收录时间 |
-| `deleted_at` | 删除时间 |
-| `deleted_by` | 执行删除的 QQ 用户 ID |
+| 字段 | 用途 | 是否需要 |
+| --- | --- | --- |
+| `id` | 自增数字 ID，供删除命令使用 | 需要，作为数字 ID |
+| `bvid` | B 站 BV 号，唯一索引 | 需要，唯一索引 |
+| `aid` | B 站 AV 号，唯一索引 | 需要；用户输入可只有 BV 或 AV，API 校验成功后两者都应存在 |
+| `canonical_url` | 规范化后的 B 站链接 | 需要 |
+| `title` | 视频标题 | 需要 |
+| `cover_url` | B 站封面来源地址 | 需要 |
+| `cover_path` | 本地封面相对路径 | 需要；尚未缓存或缓存失败时可为空 |
+| `cover_status` | `cached`、`missing` 或 `failed` | 需要 |
+| `cover_cached_at` | 最近成功缓存时间 | 需要；未成功缓存时为空 |
+| `cover_last_accessed_at` | 最近推荐读取时间 | 需要；尚未推荐时为空 |
+| `video_state` | B 站视频状态，用于基础有效性检查 | 需要 |
+| `view_count` | 播放量；上传时取得，超过刷新周期后按需更新 | 需要 |
+| `metadata_refreshed_at` | 最近成功读取 B 站元数据的时间 | 需要，作为播放量刷新判断依据 |
+| `uploader_id` | QQ 上传者 ID，权限判断依据 | 需要，但不展示 |
+| `origin_group_id` | 来源群；私聊上传时为空 | 需要，作为群管理员删除权限的前置条件 |
+| `origin_stream_id` | 来源聊天流 | 需要 |
+| `status` | `active` 或 `deleted` | 需要 |
+| `created_at` | 收录时间 | 需要 |
+| `deleted_at` | 删除时间 | 需要；未删除时为空 |
+| `deleted_by` | 执行删除的 QQ 用户 ID | 需要；未删除时为空 |
+
+首版不保存视频时长、B 站投稿者名称/UID、上传者昵称或点赞数，因为它们既不展示，也不参与权限判断。删除这些字段可以减少不必要的个人信息和刷新工作。
 
 ### 4.2 辅助表
 
@@ -237,7 +239,7 @@ B 站视频信息接口返回的 `data.pic` 是封面地址。插件需要同时
 - `command_events`：记录上传尝试和成功时间，用于跨重启限流；只保留限流窗口需要的数据。
 - `schema_meta`：保存数据库版本，便于以后升级字段。
 
-SQLite 启用 WAL、`busy_timeout` 和参数化 SQL；写操作使用短事务，并在插件内用 `asyncio.Lock` 串行化，避免两个用户同时上传同一首时产生重复数据。
+SQLite 启用 WAL、`busy_timeout` 和参数化 SQL；写操作使用短事务，并在插件内用 `asyncio.Lock` 串行化。`bvid` 和 `aid` 的数据库唯一约束是并发去重的最终保障：几乎同时上传同一视频时，只有第一次插入成功，后续请求捕获唯一约束冲突并返回同一个已有数字 ID。
 
 ## 5. 配置项
 
@@ -265,6 +267,7 @@ recommend_cooldown_seconds = 5
 
 [recommendation]
 recent_exclusion_count = 5
+metadata_refresh_days = 2       # 0 表示每次查询都尝试刷新，不建议日常使用
 
 [bilibili]
 view_api_url = "https://api.bilibili.com/x/web-interface/view"
@@ -306,14 +309,14 @@ GET https://api.bilibili.com/x/web-interface/view?aid=<AID>
 | `data.bvid`、`data.aid` | 生成标准链接和唯一去重 |
 | `data.title` | 推荐时显示标题 |
 | `data.pic` | 获取封面地址 |
-| `data.owner.mid`、`data.owner.name` | 保存 B 站投稿者信息 |
-| `data.duration`、`data.state` | 基础有效性检查和审计 |
+| `data.state` | 基础有效性检查和审计 |
+| `data.stat.view` | 保存并按刷新周期更新播放量 |
 | `data.videos`、`data.pages` | 识别多分 P 视频，首版仍按整个视频收录 |
 | `data.pubdate`、`data.tid`、`data.tname` | 可选审计信息，不参与权限判断 |
 
 无效 BVID 或缺少参数时，实测返回 `code=-400`、`message=请求错误`。接口返回的封面将 `http://` 改成 `https://` 后，样例封面可直接下载，响应为 JPEG，大小约 157 KiB。
 
-结论：这个接口足够完成首版的“验证视频、取得标题、封面、作者和统一 ID”，不再需要 `bilibili-api-python`。它不提供可靠的“是否属于中 V”判断，也不是承诺长期稳定的插件接口，因此仍要隔离在 `bilibili_client.py`，其余模块只接收插件自己的 `VideoMetadata`。
+结论：这个接口足够完成首版的“验证视频、取得标题、封面、播放量和统一 ID”，不再需要 `bilibili-api-python`。它不提供可靠的“是否属于中 V”判断，也不是承诺长期稳定的插件接口，因此仍要隔离在 `bilibili_client.py`，其余模块只接收插件自己的 `VideoMetadata`。
 
 ### 6.2 请求与响应规则
 
@@ -325,7 +328,9 @@ GET https://api.bilibili.com/x/web-interface/view?aid=<AID>
 - 限制元数据响应最大 2 MiB，先检查 JSON 类型，再检查 `code == 0` 和 `data`；
 - `bvid`、`aid`、`title`、`pic` 任一核心字段类型错误时拒绝入库；
 - 对 412、429、5xx、超时和非 JSON 响应统一做失败降级，不自动高频重试；
-- 上传时取得的信息写入本地库，随机推荐不重复请求视频接口；只有封面补抓或管理员维护时才刷新。
+- 上传时取得的信息写入本地库；推荐或按 ID 查询时先检查 `metadata_refreshed_at`，默认超过 2 天才请求一次视频接口；
+- 刷新成功时更新标题、封面来源、视频状态、播放量和刷新时间；刷新失败时继续使用库内旧信息完成推荐，不因 B 站临时故障中断核心功能；
+- `metadata_refresh_days = 0` 可近似实时刷新，但会使每次查询依赖外部接口并增加触发限流的概率，因此不作为默认值。
 
 ### 6.3 安全边界
 

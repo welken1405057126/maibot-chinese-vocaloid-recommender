@@ -8,11 +8,12 @@
 
 ### 2026-09-22 进度
 
-- M0：已在 `.gitignore` 中放行本插件目录；当前文件已可被 Git 跟踪，但尚未提交。
+- M0：已完成。插件目录已初始化为独立 Git 仓库，MaiBot 官方父仓库继续忽略整个插件目录。
 - M1：验收通过。`plugin.py` 语法、TOML、Manifest 和四个命令正则检查通过，帮助命令已完成。
-- M2：AI 已完成 `models.py`、`repository.py` 和 7 项自动测试；SQLite 初始化、去重、随机、近期排除、持久化、软删除和封面状态测试通过。
-- 下一阶段：welken 先审查曲目字段是否符合需求，再进入 M3 的 B 站固定 API 和封面缓存。
-- 待 pair 修正：`allowed_group_ids` 应与运行时 `group_id` 一样统一使用字符串；Manifest 的图文能力在命令接线时补齐。
+- M2：welken 已完成字段审查；AI 按审查结果删除不展示的时长、投稿者、上传者昵称和点赞数字段，增加播放量 2 天按需刷新设计及并发重复上传测试。
+- M3 进行中：welken 已独立写出 B 站 JSON 到 `VideoMetadata` 的核心字段对应和两个合法链接样例；pair 阶段补齐语法、业务错误校验和 3 项解析测试。
+- 下一阶段：AI 补充固定 API 的网络请求、超时和大小限制；welken 负责核对成功/失败提示文案。
+- 已修正：`allowed_group_ids` 与运行时 `group_id` 统一使用字符串。待 pair 修正：Manifest 的图文能力在命令接线时补齐。
 
 ## 2. 当前草稿的状态
 
@@ -29,8 +30,8 @@
 | `README.md` | 空文件 | 由 welken 主写 |
 | `CHANGELOG.md` | 空文件 | 由 welken 维护 |
 | `config.toml` | 已由 welken 创建并通过 TOML 解析 | 接线时补充网络和限流配置 |
-| `bilibili_client.py` | 尚未创建 | 由 AI 编写固定接口访问层 |
-| `tests/` | 尚未创建 | AI 写自动测试，welken 写并执行手工测试清单 |
+| `bilibili_client.py` | welken 已完成核心 JSON 字段映射，解析校验已通过测试 | AI 继续补固定接口网络访问层 |
+| `tests/` | 已有数据库和 B 站响应解析测试 | AI 继续补自动测试，welken 编写并执行手工测试清单 |
 
 当前 `plugin.py` 已通过语法检查，命令骨架可以进入接线阶段。尚未完成的是实际上传、推荐和删除业务；这些占位函数返回成功但还不会操作曲库。Manifest 当前只有 `send.text`，图文能力会在 M4 接线时补齐。
 

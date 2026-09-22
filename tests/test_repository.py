@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+import sqlite3
 import sys
 import tempfile
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
@@ -26,15 +29,10 @@ def make_track(
             aid=10_000 + number,
             title=f"Track {number}",
             cover_url=f"https://i0.hdslb.com/{bvid}.jpg",
-            owner_mid=str(30_000 + number),
-            owner_name=f"Owner {number}",
-            duration=180,
             view_count=number * 100,
-            like_count=number * 10,
         ),
         canonical_url=f"https://www.bilibili.com/video/{bvid}",
         uploader_id=uploader_id,
-        uploader_name="Uploader",
         origin_group_id=group_id,
         origin_stream_id=group_id or f"private-{uploader_id}",
     )
@@ -54,6 +52,17 @@ class TrackRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.db_path.is_file())
         self.assertEqual(await self.repository.get_schema_version(), SCHEMA_VERSION)
         self.assertEqual(await self.repository.count_active(), 0)
+        connection = sqlite3.connect(self.db_path)
+        try:
+            columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(tracks)")}
+        finally:
+            connection.close()
+        self.assertTrue(
+            {"bvid", "aid", "video_state", "view_count", "metadata_refreshed_at"} <= columns
+        )
+        self.assertTrue(
+            {"duration", "video_owner_mid", "video_owner_name", "uploader_name", "like_count"}.isdisjoint(columns)
+        )
 
     async def test_adds_and_persists_track(self) -> None:
         result = await self.repository.add_track(make_track(1), now="2026-09-22T10:00:00+00:00")
@@ -79,12 +88,9 @@ class TrackRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 aid=99999,
                 title="Duplicate by BVID",
                 cover_url="https://i0.hdslb.com/duplicate.jpg",
-                owner_mid="1",
-                owner_name="Owner",
             ),
             canonical_url="https://www.bilibili.com/video/duplicate",
             uploader_id="2",
-            uploader_name="Other",
             origin_stream_id="stream-2",
         )
         duplicate_aid = make_track(2)
@@ -94,12 +100,9 @@ class TrackRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 aid=first.track.aid,
                 title=duplicate_aid.metadata.title,
                 cover_url=duplicate_aid.metadata.cover_url,
-                owner_mid=duplicate_aid.metadata.owner_mid,
-                owner_name=duplicate_aid.metadata.owner_name,
             ),
             canonical_url=duplicate_aid.canonical_url,
             uploader_id=duplicate_aid.uploader_id,
-            uploader_name=duplicate_aid.uploader_name,
             origin_group_id=duplicate_aid.origin_group_id,
             origin_stream_id=duplicate_aid.origin_stream_id,
         )
@@ -111,6 +114,17 @@ class TrackRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(by_aid.created)
         self.assertEqual(by_bvid.track.id, first.track.id)
         self.assertEqual(by_aid.track.id, first.track.id)
+        self.assertEqual(await self.repository.count_active(), 1)
+
+    async def test_concurrent_duplicate_uploads_create_one_track(self) -> None:
+        def upload_from_independent_connection():
+            repository = TrackRepository(self.db_path)
+            return asyncio.run(repository.add_track(make_track(1)))
+
+        results = await asyncio.gather(*(asyncio.to_thread(upload_from_independent_connection) for _ in range(8)))
+
+        self.assertEqual(sum(result.created for result in results), 1)
+        self.assertEqual({result.track.id for result in results}, {1})
         self.assertEqual(await self.repository.count_active(), 1)
 
     async def test_random_selection_excludes_recent_then_falls_back(self) -> None:
@@ -177,6 +191,38 @@ class TrackRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(updated.cover_status, CoverStatus.CACHED)
         self.assertEqual(updated.cover_path, "covers/BV0000000001.jpg")
         self.assertEqual(updated.cover_cached_at, "2026-09-22T12:00:00+00:00")
+
+    async def test_refreshes_stale_video_metadata(self) -> None:
+        track = (
+            await self.repository.add_track(
+                make_track(1),
+                now="2026-09-20T10:00:00+00:00",
+            )
+        ).track
+        before_limit = datetime(2026, 9, 22, 9, 59, 59, tzinfo=UTC)
+        at_limit = datetime(2026, 9, 22, 10, 0, 0, tzinfo=UTC)
+
+        self.assertFalse(self.repository.metadata_is_stale(track, now=before_limit))
+        self.assertTrue(self.repository.metadata_is_stale(track, now=at_limit))
+
+        refreshed = await self.repository.update_video_metadata(
+            track.id,
+            VideoMetadata(
+                bvid=track.bvid,
+                aid=track.aid,
+                title="Updated title",
+                cover_url="https://i0.hdslb.com/updated.jpg",
+                state=0,
+                view_count=999,
+            ),
+            now="2026-09-22T10:00:00+00:00",
+        )
+
+        self.assertIsNotNone(refreshed)
+        assert refreshed is not None
+        self.assertEqual(refreshed.title, "Updated title")
+        self.assertEqual(refreshed.view_count, 999)
+        self.assertEqual(refreshed.metadata_refreshed_at, "2026-09-22T10:00:00+00:00")
 
 
 if __name__ == "__main__":

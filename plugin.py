@@ -31,7 +31,7 @@ class ScopeSectionConfig(PluginConfigBase):
     __ui_icon__ = "users"
     __ui_order__ = 1
 
-    allowed_group_ids: list[int] = Field(default_factory=list, description="允许使用的群号，空群号表示无限制")
+    allowed_group_ids: list[str] = Field(default_factory=list, description="允许使用的群号，空群号表示无限制")
     allow_private: bool = Field(default=True, description="是否允许私聊使用")
     library_mode: str = Field(default="global", description="曲库模式，首版固定 global")
 
@@ -55,6 +55,7 @@ class RecommendationSectionConfig(PluginConfigBase):
     __ui_order__ = 3
 
     recent_exclusion_count: int = Field(default=5, description="推荐时避开最近 N 首")
+    metadata_refresh_days: int = Field(default=2, description="视频信息超过 N 天后按需刷新")
 
 
 
@@ -165,8 +166,6 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
         )
         await self.ctx.send.text(text, stream_id)
         return True, "已显示帮助", True
-
-
 
 
 

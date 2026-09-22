@@ -31,12 +31,8 @@ class VideoMetadata:
     aid: int
     title: str
     cover_url: str
-    owner_mid: str
-    owner_name: str
-    duration: int = 0
     state: int = 0
     view_count: int = 0
-    like_count: int = 0
 
     def __post_init__(self) -> None:
         if not self.bvid.strip():
@@ -56,7 +52,6 @@ class NewTrack:
     metadata: VideoMetadata
     canonical_url: str
     uploader_id: str
-    uploader_name: str
     origin_stream_id: str
     origin_group_id: str | None = None
     cover_path: str | None = None
@@ -83,15 +78,10 @@ class Track:
     cover_status: CoverStatus
     cover_cached_at: str | None
     cover_last_accessed_at: str | None
-    video_owner_mid: str
-    video_owner_name: str
-    duration: int
     video_state: int
     view_count: int
-    like_count: int
     metadata_refreshed_at: str
     uploader_id: str
-    uploader_name: str
     origin_group_id: str | None
     origin_stream_id: str
     status: TrackStatus
