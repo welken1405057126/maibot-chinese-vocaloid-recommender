@@ -1,0 +1,34 @@
+{
+  "manifest_version": 2,
+  "version": "1.0.0",
+  "name": "中v推荐",
+  "description": "可在群内以b站链接形式发送v曲",
+  "author": {
+    "name": "welken",
+    "url": "https://github.com/welken1405057126"
+  },
+  "license": "GPL-v3.0-or-later",
+  "urls": {
+    "repository": "https://github.com/welken1405057126/maibot-chinese-vocaloid-recommender"
+  },
+  "changelog": "CHANGELOG.md",
+  "host_application": {
+    "min_version": "1.0.0",
+    "max_version": "1.0.11"
+  },
+  "sdk": {
+    "min_version": "2.0.0",
+    "max_version": "2.99.99"
+  },
+  "dependencies": [],
+  "capabilities": [
+    "send.text"
+  ],
+  "i18n": {
+    "default_locale": "zh-CN",
+    "supported_locales": [
+      "zh-CN"
+    ]
+  },
+  "id": "welken.Chinese_vocaloid_recommender"
+}

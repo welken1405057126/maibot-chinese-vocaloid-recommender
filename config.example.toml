@@ -1,0 +1,22 @@
+[plugin]
+enabled = true
+config_version = "1.0.0"
+
+[scope]
+allowed_group_ids = []
+allow_private = true
+library_mode = "global"
+
+[permission]
+global_admin_ids = []
+allow_group_admin_delete = true
+
+[recommendation]
+recent_exclusion_count = 5
+
+[cover_cache]
+cleanup_interval_hours = 24
+deleted_retention_days = 30
+orphan_retention_days = 7
+temp_retention_hours = 24
+max_cache_mib = 256
