@@ -23,6 +23,24 @@ class DeleteStatus(StrEnum):
     ALREADY_DELETED = "already_deleted"
 
 
+class UploadLimitStatus(StrEnum):
+    ALLOWED = "allowed"
+    COOLDOWN = "cooldown"
+    DAILY_LIMIT = "daily_limit"
+    STREAM_LIMIT = "stream_limit"
+
+
+class UploadStatus(StrEnum):
+    CREATED = "created"
+    DUPLICATE = "duplicate"
+    PREVIOUSLY_DELETED = "previously_deleted"
+    INVALID_LINK = "invalid_link"
+    API_ERROR = "api_error"
+    COOLDOWN = "cooldown"
+    DAILY_LIMIT = "daily_limit"
+    STREAM_LIMIT = "stream_limit"
+
+
 @dataclass(frozen=True, slots=True)
 class VideoMetadata:
     """Normalized subset of the Bilibili view API response."""
@@ -100,3 +118,16 @@ class AddTrackResult:
 class DeleteTrackResult:
     status: DeleteStatus
     track: Track | None
+
+
+@dataclass(frozen=True, slots=True)
+class UploadLimitResult:
+    status: UploadLimitStatus
+    retry_after_seconds: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class UploadResult:
+    status: UploadStatus
+    track: Track | None = None
+    retry_after_seconds: int = 0

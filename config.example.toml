@@ -26,6 +26,17 @@ recent_exclusion_count = 5
 # 播放量等元数据 N 天后刷新
 metadata_refresh_days = 2
 
+# 命令限流。限流记录保存在本地 SQLite，重启后仍然有效。
+[rate_limit]
+# 同一用户两次合法上传尝试的最短间隔秒数。
+upload_cooldown_seconds = 60
+# 同一用户按北京时间计算的每日成功收录上限。
+upload_daily_limit = 10
+# 同一聊天流每分钟最多受理的上传尝试数。
+stream_upload_attempts_per_minute = 20
+# 推荐命令冷却秒数（推荐命令接线后生效）。
+recommend_cooldown_seconds = 5
+
 # B 站只读请求配置。接口域名和请求头由代码固定，避免误配到其他主机。
 [network]
 # 一次上传或刷新流程的总超时秒数。

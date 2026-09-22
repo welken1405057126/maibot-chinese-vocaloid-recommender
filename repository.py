@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import sqlite3
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
@@ -17,6 +18,8 @@ try:
         NewTrack,
         Track,
         TrackStatus,
+        UploadLimitResult,
+        UploadLimitStatus,
         VideoMetadata,
     )
 except ImportError:
@@ -28,6 +31,8 @@ except ImportError:
         NewTrack,
         Track,
         TrackStatus,
+        UploadLimitResult,
+        UploadLimitStatus,
         VideoMetadata,
     )
 
@@ -141,6 +146,123 @@ class TrackRepository:
             try:
                 row = connection.execute("SELECT value FROM schema_meta WHERE key = 'schema_version'").fetchone()
                 return int(row["value"]) if row is not None else 0
+            finally:
+                connection.close()
+
+    async def check_upload_rate_limit(
+        self,
+        *,
+        stream_id: str,
+        user_id: str,
+        cooldown_seconds: int,
+        daily_limit: int,
+        stream_attempts_per_minute: int,
+        now: datetime | None = None,
+        day_started_at: datetime | None = None,
+    ) -> UploadLimitResult:
+        """Atomically check upload limits and reserve one accepted attempt."""
+
+        current_time = now or datetime.now(UTC)
+        if current_time.tzinfo is None:
+            current_time = current_time.replace(tzinfo=UTC)
+        current_time = current_time.astimezone(UTC)
+        day_start = day_started_at or current_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        if day_start.tzinfo is None:
+            day_start = day_start.replace(tzinfo=UTC)
+        day_start = day_start.astimezone(UTC)
+        minute_start = current_time - timedelta(minutes=1)
+
+        async with self._lock:
+            connection = self._connect()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    "DELETE FROM command_events WHERE created_at < ?",
+                    ((day_start - timedelta(days=1)).isoformat(timespec="seconds"),),
+                )
+
+                if stream_attempts_per_minute > 0:
+                    rows = connection.execute(
+                        """
+                        SELECT created_at FROM command_events
+                        WHERE event_type = 'upload_attempt'
+                          AND stream_id = ? AND created_at >= ?
+                        ORDER BY created_at ASC
+                        """,
+                        (stream_id, minute_start.isoformat(timespec="seconds")),
+                    ).fetchall()
+                    if len(rows) >= stream_attempts_per_minute:
+                        retry_after = _seconds_until(
+                            datetime.fromisoformat(str(rows[0]["created_at"])) + timedelta(minutes=1),
+                            current_time,
+                        )
+                        connection.rollback()
+                        return UploadLimitResult(UploadLimitStatus.STREAM_LIMIT, retry_after)
+
+                if cooldown_seconds > 0:
+                    row = connection.execute(
+                        """
+                        SELECT created_at FROM command_events
+                        WHERE event_type = 'upload_attempt' AND user_id = ?
+                        ORDER BY id DESC LIMIT 1
+                        """,
+                        (user_id,),
+                    ).fetchone()
+                    if row is not None:
+                        allowed_at = datetime.fromisoformat(str(row["created_at"])) + timedelta(
+                            seconds=cooldown_seconds
+                        )
+                        retry_after = _seconds_until(allowed_at, current_time)
+                        if retry_after > 0:
+                            connection.rollback()
+                            return UploadLimitResult(UploadLimitStatus.COOLDOWN, retry_after)
+
+                if daily_limit > 0:
+                    row = connection.execute(
+                        """
+                        SELECT COUNT(*) AS count FROM command_events
+                        WHERE event_type = 'upload_success' AND user_id = ?
+                          AND created_at >= ?
+                        """,
+                        (user_id, day_start.isoformat(timespec="seconds")),
+                    ).fetchone()
+                    if row is not None and int(row["count"]) >= daily_limit:
+                        connection.rollback()
+                        return UploadLimitResult(UploadLimitStatus.DAILY_LIMIT)
+
+                connection.execute(
+                    """
+                    INSERT INTO command_events(event_type, stream_id, user_id, succeeded, created_at)
+                    VALUES ('upload_attempt', ?, ?, 0, ?)
+                    """,
+                    (stream_id, user_id, current_time.isoformat(timespec="seconds")),
+                )
+                connection.commit()
+                return UploadLimitResult(UploadLimitStatus.ALLOWED)
+            finally:
+                connection.close()
+
+    async def record_upload_success(
+        self,
+        *,
+        stream_id: str,
+        user_id: str,
+        now: datetime | None = None,
+    ) -> None:
+        current_time = now or datetime.now(UTC)
+        if current_time.tzinfo is None:
+            current_time = current_time.replace(tzinfo=UTC)
+        async with self._lock:
+            connection = self._connect()
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO command_events(event_type, stream_id, user_id, succeeded, created_at)
+                    VALUES ('upload_success', ?, ?, 1, ?)
+                    """,
+                    (stream_id, user_id, current_time.astimezone(UTC).isoformat(timespec="seconds")),
+                )
+                connection.commit()
             finally:
                 connection.close()
 
@@ -506,3 +628,11 @@ class TrackRepository:
             deleted_at=str(row["deleted_at"]) if row["deleted_at"] is not None else None,
             deleted_by=str(row["deleted_by"]) if row["deleted_by"] is not None else None,
         )
+
+
+def _seconds_until(target: datetime, current: datetime) -> int:
+    if target.tzinfo is None:
+        target = target.replace(tzinfo=UTC)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=UTC)
+    return max(0, math.ceil((target.astimezone(UTC) - current.astimezone(UTC)).total_seconds()))

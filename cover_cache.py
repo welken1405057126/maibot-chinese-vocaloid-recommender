@@ -126,7 +126,10 @@ class CoverCache:
         target = self.cover_dir / f"{bvid}{extension}"
 
         async with self._file_lock:
-            await asyncio.to_thread(self._atomic_store, target, body, bvid)
+            try:
+                await asyncio.to_thread(self._atomic_store, target, body, bvid)
+            except OSError as exc:
+                raise CoverCacheError("could not store cover image") from exc
 
         return CachedCover(
             relative_path=f"covers/{target.name}",

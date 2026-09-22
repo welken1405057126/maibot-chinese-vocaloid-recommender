@@ -84,6 +84,12 @@ def parse_video_reference(url: str) -> VideoReference:
     return value
 
 
+def validate_user_video_url(url: str) -> None:
+    """Validate an ordinary or short Bilibili video URL without requesting it."""
+
+    _classify_user_url(url)
+
+
 def canonical_video_url(metadata: VideoMetadata) -> str:
     return f"https://www.bilibili.com/video/{metadata.bvid}"
 

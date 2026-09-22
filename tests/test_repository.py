@@ -12,7 +12,14 @@ PLUGIN_DIR = Path(__file__).resolve().parents[1]
 if str(PLUGIN_DIR) not in sys.path:
     sys.path.insert(0, str(PLUGIN_DIR))
 
-from models import CoverStatus, DeleteStatus, NewTrack, TrackStatus, VideoMetadata  # noqa: E402
+from models import (  # noqa: E402
+    CoverStatus,
+    DeleteStatus,
+    NewTrack,
+    TrackStatus,
+    UploadLimitStatus,
+    VideoMetadata,
+)
 from repository import SCHEMA_VERSION, TrackRepository  # noqa: E402
 
 
@@ -225,6 +232,107 @@ class TrackRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(refreshed.title, "Updated title")
         self.assertEqual(refreshed.view_count, 999)
         self.assertEqual(refreshed.metadata_refreshed_at, "2026-09-22T10:00:00+00:00")
+
+    async def test_upload_cooldown_is_persistent(self) -> None:
+        first_time = datetime(2026, 9, 22, 10, 0, 0, tzinfo=UTC)
+        first = await self.repository.check_upload_rate_limit(
+            stream_id="stream-a",
+            user_id="user-a",
+            cooldown_seconds=60,
+            daily_limit=10,
+            stream_attempts_per_minute=20,
+            now=first_time,
+        )
+        reopened = TrackRepository(self.db_path)
+        second = await reopened.check_upload_rate_limit(
+            stream_id="stream-a",
+            user_id="user-a",
+            cooldown_seconds=60,
+            daily_limit=10,
+            stream_attempts_per_minute=20,
+            now=datetime(2026, 9, 22, 10, 0, 15, tzinfo=UTC),
+        )
+
+        self.assertEqual(first.status, UploadLimitStatus.ALLOWED)
+        self.assertEqual(second.status, UploadLimitStatus.COOLDOWN)
+        self.assertEqual(second.retry_after_seconds, 45)
+
+    async def test_upload_daily_and_stream_limits(self) -> None:
+        now = datetime(2026, 9, 22, 10, 0, 0, tzinfo=UTC)
+        allowed = await self.repository.check_upload_rate_limit(
+            stream_id="stream-a",
+            user_id="daily-user",
+            cooldown_seconds=0,
+            daily_limit=1,
+            stream_attempts_per_minute=2,
+            now=now,
+        )
+        await self.repository.record_upload_success(stream_id="stream-a", user_id="daily-user", now=now)
+        daily_limited = await self.repository.check_upload_rate_limit(
+            stream_id="stream-a",
+            user_id="daily-user",
+            cooldown_seconds=0,
+            daily_limit=1,
+            stream_attempts_per_minute=20,
+            now=datetime(2026, 9, 22, 10, 0, 1, tzinfo=UTC),
+        )
+        second_stream_attempt = await self.repository.check_upload_rate_limit(
+            stream_id="stream-a",
+            user_id="other-user",
+            cooldown_seconds=0,
+            daily_limit=10,
+            stream_attempts_per_minute=2,
+            now=datetime(2026, 9, 22, 10, 0, 2, tzinfo=UTC),
+        )
+        stream_limited = await self.repository.check_upload_rate_limit(
+            stream_id="stream-a",
+            user_id="third-user",
+            cooldown_seconds=0,
+            daily_limit=10,
+            stream_attempts_per_minute=2,
+            now=datetime(2026, 9, 22, 10, 0, 3, tzinfo=UTC),
+        )
+
+        self.assertEqual(allowed.status, UploadLimitStatus.ALLOWED)
+        self.assertEqual(daily_limited.status, UploadLimitStatus.DAILY_LIMIT)
+        self.assertEqual(second_stream_attempt.status, UploadLimitStatus.ALLOWED)
+        self.assertEqual(stream_limited.status, UploadLimitStatus.STREAM_LIMIT)
+        self.assertEqual(stream_limited.retry_after_seconds, 57)
+
+    async def test_upload_daily_limit_resets_at_beijing_midnight(self) -> None:
+        before_midnight = datetime(2026, 9, 22, 15, 59, 0, tzinfo=UTC)
+        old_day_start = datetime(2026, 9, 21, 16, 0, 0, tzinfo=UTC)
+        await self.repository.check_upload_rate_limit(
+            stream_id="stream-a",
+            user_id="user-a",
+            cooldown_seconds=0,
+            daily_limit=1,
+            stream_attempts_per_minute=0,
+            now=before_midnight,
+            day_started_at=old_day_start,
+        )
+        await self.repository.record_upload_success(stream_id="stream-a", user_id="user-a", now=before_midnight)
+        limited = await self.repository.check_upload_rate_limit(
+            stream_id="stream-a",
+            user_id="user-a",
+            cooldown_seconds=0,
+            daily_limit=1,
+            stream_attempts_per_minute=0,
+            now=datetime(2026, 9, 22, 15, 59, 30, tzinfo=UTC),
+            day_started_at=old_day_start,
+        )
+        reset = await self.repository.check_upload_rate_limit(
+            stream_id="stream-a",
+            user_id="user-a",
+            cooldown_seconds=0,
+            daily_limit=1,
+            stream_attempts_per_minute=0,
+            now=datetime(2026, 9, 22, 16, 0, 0, tzinfo=UTC),
+            day_started_at=datetime(2026, 9, 22, 16, 0, 0, tzinfo=UTC),
+        )
+
+        self.assertEqual(limited.status, UploadLimitStatus.DAILY_LIMIT)
+        self.assertEqual(reset.status, UploadLimitStatus.ALLOWED)
 
 
 if __name__ == "__main__":
