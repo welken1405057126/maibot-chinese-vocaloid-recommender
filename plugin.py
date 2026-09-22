@@ -12,11 +12,13 @@ try:
     from .cover_cache import CoverCache
     from .repository import TrackRepository
     from .upload_service import UploadService, format_upload_reply
+    from .recommend_service import RecommendService, format_recommend_reply
 except ImportError:
     from bilibili_client import BilibiliClient  # type: ignore[no-redef]
     from cover_cache import CoverCache  # type: ignore[no-redef]
     from repository import TrackRepository  # type: ignore[no-redef]
     from upload_service import UploadService, format_upload_reply  # type: ignore[no-redef]
+    from recommend_service import RecommendService, format_recommend_reply  # type: ignore[no-redef]
 
 
 class PluginSectionConfig(PluginConfigBase):
@@ -126,6 +128,7 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
         self._data_dir: Path | None = None
         self._repository: TrackRepository | None = None
         self._upload_service: UploadService | None = None
+        self._recommend_service: RecommendService | None = None
 
     async def on_load(self) -> None:
         data_dir = self.ctx.paths.data_dir
@@ -137,6 +140,7 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
 
     async def on_unload(self) -> None:
         self._upload_service = None
+        self._recommend_service = None
         self._repository = None
         self._data_dir = None
 
@@ -150,6 +154,7 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
         network = self.config.network
         cache = self.config.cover_cache
         limits = self.config.rate_limit
+        recommendation = self.config.recommendation
         bilibili_client = BilibiliClient(
             request_timeout_seconds=network.request_timeout_seconds,
             max_response_bytes=network.metadata_max_bytes,
@@ -173,6 +178,10 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
             daily_limit=limits.upload_daily_limit,
             stream_attempts_per_minute=limits.stream_upload_attempts_per_minute,
         )
+        self._recommend_service = RecommendService(
+            self._repository,
+            recent_exclude_limit=recommendation.recent_exclusion_count,
+        )
 
     def _in_scope(self, group_id: str) -> bool:
         if not self.config.plugin.enabled:
@@ -194,7 +203,17 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
         del user_id, kwargs
         if not self._in_scope(group_id):
             return True, "", True
-        return True, "", True
+
+        if not stream_id:
+            reply = "推荐失败了，待会再试"
+        elif self._recommend_service is None:
+            reply = "推荐失败了，待会再试"
+        else:
+            result = await self._recommend_service.recommend(stream_id=str(stream_id))
+            reply = format_recommend_reply(result)
+
+        await self.ctx.send.text(reply, stream_id)
+        return True, reply, True
 
     @Command(
         "update_chinese_vocaloid",

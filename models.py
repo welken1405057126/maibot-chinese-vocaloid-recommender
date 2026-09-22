@@ -41,6 +41,11 @@ class UploadStatus(StrEnum):
     STREAM_LIMIT = "stream_limit"
 
 
+class RecommendStatus(StrEnum):
+    FOUND = "found"
+    EMPTY_LIBRARY = "empty_library"
+
+
 @dataclass(frozen=True, slots=True)
 class VideoMetadata:
     """Normalized subset of the Bilibili view API response."""
@@ -131,3 +136,9 @@ class UploadResult:
     status: UploadStatus
     track: Track | None = None
     retry_after_seconds: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class RecommendResult:
+    status: RecommendStatus
+    track: Track | None = None
