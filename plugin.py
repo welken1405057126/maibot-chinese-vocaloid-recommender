@@ -22,7 +22,7 @@ class PluginSectionConfig(PluginConfigBase):
     __ui_order__ = 0
 
     enabled: bool = Field(default=True, description="是否启用插件")
-    config_version: str = Field(default="1.0.0", description="配置版本")
+    config_version: str = Field(default="0.1.0", description="配置版本")
 
 class ScopeSectionConfig(PluginConfigBase):
     """作用范围配置。"""
@@ -59,11 +59,23 @@ class RecommendationSectionConfig(PluginConfigBase):
 
 
 
+class NetworkSectionConfig(PluginConfigBase):
+    """B 站只读请求配置。"""
+
+    __ui_label__ = "网络"
+    __ui_icon__ = "network"
+    __ui_order__ = 4
+
+    request_timeout_seconds: float = Field(default=12, description="单次命令的 B 站请求总超时秒数")
+    max_redirects: int = Field(default=3, description="b23.tv 短链最多跳转次数")
+    metadata_max_bytes: int = Field(default=2 * 1024 * 1024, description="元数据响应最大字节数")
+
+
 class CoverCacheSectionConfig(PluginConfigBase):
     """封面缓存配置。"""
     __ui_label__ = "封面缓存"
     __ui_icon__ = "image"
-    __ui_order__ = 4
+    __ui_order__ = 5
 
     cleanup_interval_hours: int = Field(default=24, description="惰性清理间隔小时")
     deleted_retention_days: int = Field(default=30, description="软删除曲目封面保留天数")
@@ -78,6 +90,7 @@ class ChineseVocaloidRecommenderPluginConfig(PluginConfigBase):
     scope: ScopeSectionConfig = Field(default_factory=ScopeSectionConfig)
     permission: PermissionSectionConfig = Field(default_factory=PermissionSectionConfig)
     recommendation: RecommendationSectionConfig = Field(default_factory=RecommendationSectionConfig)
+    network: NetworkSectionConfig = Field(default_factory=NetworkSectionConfig)
     cover_cache: CoverCacheSectionConfig = Field(default_factory=CoverCacheSectionConfig)
 
 

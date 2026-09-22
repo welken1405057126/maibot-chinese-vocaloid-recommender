@@ -1,23 +1,49 @@
+# 插件基础设置
 [plugin]
 enabled = true
-config_version = "1.0.0"
+config_version = "0.1.0"
 
+# 作用范围配置
 [scope]
+# 允许使用插件的群号，字符串形式。空列表 = 不限制群；试运行时建议只填测试群。
 allowed_group_ids = []
+# 是否允许私聊使用
 allow_private = true
+# 是否全局共享曲库, global 为全局共享，group 为各群独立。
 library_mode = "global"
 
+# 权限配置
 [permission]
+# 全局管理员 QQ 号列表，字符串形式。空列表 = 无人拥有全局管理权。
 global_admin_ids = []
+# 是否允许管理员删除本群来源投稿
 allow_group_admin_delete = true
 
+# 推荐配置
 [recommendation]
+# 随机推荐时，最近 N 首不被使用
 recent_exclusion_count = 5
+# 播放量等元数据 N 天后刷新
 metadata_refresh_days = 2
 
+# B 站只读请求配置。接口域名和请求头由代码固定，避免误配到其他主机。
+[network]
+# 一次上传或刷新流程的总超时秒数。
+request_timeout_seconds = 12
+# b23.tv 短链允许的最大跳转次数，每次跳转都会重新检查域名。
+max_redirects = 3
+# 视频元数据响应上限（字节），默认 2 MiB。
+metadata_max_bytes = 2097152
+
+# 封面缓存配置
 [cover_cache]
+# 后台清理任务的间隔小时数。
 cleanup_interval_hours = 24
+# 已删除投稿封面保留时间
 deleted_retention_days = 30
+# 无主封面的保留天数。
 orphan_retention_days = 7
+# 临时文件的保留小时数。
 temp_retention_hours = 24
+# 缓存总大小上限（MiB），超出后清理。
 max_cache_mib = 256

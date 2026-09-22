@@ -1,6 +1,6 @@
 {
   "manifest_version": 2,
-  "version": "1.0.0",
+  "version": "0.1.0",
   "name": "中v推荐",
   "description": "可在群内以b站链接形式发送v曲",
   "author": {

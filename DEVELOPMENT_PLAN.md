@@ -248,7 +248,7 @@ SQLite 启用 WAL、`busy_timeout` 和参数化 SQL；写操作使用短事务�
 ```toml
 [plugin]
 enabled = true
-config_version = "1.0.0"
+config_version = "0.1.0"
 
 [scope]
 allowed_group_ids = []       # 空数组表示不限制群
@@ -269,15 +269,10 @@ recommend_cooldown_seconds = 5
 recent_exclusion_count = 5
 metadata_refresh_days = 2       # 0 表示每次查询都尝试刷新，不建议日常使用
 
-[bilibili]
-view_api_url = "https://api.bilibili.com/x/web-interface/view"
-user_agent = "Mozilla/5.0"
-referer = "https://www.bilibili.com/"
-metadata_max_bytes = 2097152
-
 [network]
 request_timeout_seconds = 12
 max_redirects = 3
+metadata_max_bytes = 2097152
 max_cover_bytes = 8388608
 
 [cover_cache]
