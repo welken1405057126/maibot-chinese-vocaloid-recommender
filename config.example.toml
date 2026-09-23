@@ -34,7 +34,7 @@ upload_cooldown_seconds = 60
 upload_daily_limit = 10
 # 同一聊天流每分钟最多受理的上传尝试数。
 stream_upload_attempts_per_minute = 20
-# 推荐命令冷却秒数（推荐命令接线后生效）。
+# 同一聊天流两次推荐命令的最短间隔秒数。
 recommend_cooldown_seconds = 5
 
 # B 站只读请求配置。接口域名和请求头由代码固定，避免误配到其他主机。

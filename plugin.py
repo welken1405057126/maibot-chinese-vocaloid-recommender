@@ -10,12 +10,14 @@ from maibot_sdk import Command, Field, MaiBotPlugin, PluginConfigBase
 try:
     from .bilibili_client import BilibiliClient
     from .cover_cache import CoverCache
+    from .models import RecommendStatus
     from .repository import TrackRepository
     from .upload_service import UploadService, format_upload_reply
     from .recommend_service import RecommendService, format_recommend_reply
 except ImportError:
     from bilibili_client import BilibiliClient  # type: ignore[no-redef]
     from cover_cache import CoverCache  # type: ignore[no-redef]
+    from models import RecommendStatus  # type: ignore[no-redef]
     from repository import TrackRepository  # type: ignore[no-redef]
     from upload_service import UploadService, format_upload_reply  # type: ignore[no-redef]
     from recommend_service import RecommendService, format_recommend_reply  # type: ignore[no-redef]
@@ -76,7 +78,7 @@ class RateLimitSectionConfig(PluginConfigBase):
     upload_cooldown_seconds: int = Field(default=60, description="同一用户两次上传尝试的间隔秒数")
     upload_daily_limit: int = Field(default=10, description="同一用户每天成功上传上限")
     stream_upload_attempts_per_minute: int = Field(default=20, description="同一聊天流每分钟上传尝试上限")
-    recommend_cooldown_seconds: int = Field(default=5, description="同一用户推荐命令冷却秒数")
+    recommend_cooldown_seconds: int = Field(default=5, description="同一聊天流推荐命令冷却秒数")
 
 
 class NetworkSectionConfig(PluginConfigBase):
@@ -180,7 +182,11 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
         )
         self._recommend_service = RecommendService(
             self._repository,
+            bilibili_client,
+            cover_cache,
             recent_exclude_limit=recommendation.recent_exclusion_count,
+            metadata_refresh_days=recommendation.metadata_refresh_days,
+            cooldown_seconds=limits.recommend_cooldown_seconds,
         )
 
     def _in_scope(self, group_id: str) -> bool:
@@ -204,6 +210,7 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
         if not self._in_scope(group_id):
             return True, "", True
 
+        result = None
         if not stream_id:
             reply = "推荐失败了，待会再试"
         elif self._recommend_service is None:
@@ -212,7 +219,26 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
             result = await self._recommend_service.recommend(stream_id=str(stream_id))
             reply = format_recommend_reply(result)
 
-        await self.ctx.send.text(reply, stream_id)
+        if (
+            result is not None
+            and result.status is RecommendStatus.FOUND
+            and result.track is not None
+            and result.image_base64 is not None
+        ):
+            segments = [
+                {"type": "text", "content": f"推荐\n《{result.track.title}》"},
+                {"type": "image", "content": result.image_base64},
+                {"type": "text", "content": result.track.canonical_url},
+            ]
+            try:
+                sent = await self.ctx.send.hybrid(segments, stream_id)
+            except Exception as exc:
+                self.ctx.logger.warning("推荐图文发送失败，将退化为纯文本: %s", exc)
+                sent = False
+            if sent is False:
+                await self.ctx.send.text(reply, stream_id)
+        else:
+            await self.ctx.send.text(reply, stream_id)
         return True, reply, True
 
     @Command(

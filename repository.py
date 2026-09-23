@@ -266,6 +266,62 @@ class TrackRepository:
             finally:
                 connection.close()
 
+    async def reserve_recommendation_attempt(
+        self,
+        *,
+        stream_id: str,
+        cooldown_seconds: int,
+        now: datetime | None = None,
+    ) -> int:
+        """Reserve one recommendation attempt, returning remaining cooldown seconds."""
+
+        if cooldown_seconds <= 0:
+            return 0
+        current_time = now or datetime.now(UTC)
+        if current_time.tzinfo is None:
+            current_time = current_time.replace(tzinfo=UTC)
+        current_time = current_time.astimezone(UTC)
+
+        async with self._lock:
+            connection = self._connect()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    """
+                    DELETE FROM command_events
+                    WHERE event_type = 'recommend_attempt' AND created_at < ?
+                    """,
+                    ((current_time - timedelta(days=1)).isoformat(timespec="seconds"),),
+                )
+                row = connection.execute(
+                    """
+                    SELECT created_at FROM command_events
+                    WHERE event_type = 'recommend_attempt' AND stream_id = ?
+                    ORDER BY id DESC LIMIT 1
+                    """,
+                    (stream_id,),
+                ).fetchone()
+                if row is not None:
+                    allowed_at = datetime.fromisoformat(str(row["created_at"])) + timedelta(
+                        seconds=cooldown_seconds
+                    )
+                    retry_after = _seconds_until(allowed_at, current_time)
+                    if retry_after > 0:
+                        connection.rollback()
+                        return retry_after
+
+                connection.execute(
+                    """
+                    INSERT INTO command_events(event_type, stream_id, user_id, succeeded, created_at)
+                    VALUES ('recommend_attempt', ?, '', 0, ?)
+                    """,
+                    (stream_id, current_time.isoformat(timespec="seconds")),
+                )
+                connection.commit()
+                return 0
+            finally:
+                connection.close()
+
     async def add_track(self, new_track: NewTrack, *, now: str | None = None) -> AddTrackResult:
         timestamp = now or utc_now_iso()
         metadata = new_track.metadata

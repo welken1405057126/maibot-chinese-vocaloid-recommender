@@ -44,6 +44,7 @@ class UploadStatus(StrEnum):
 class RecommendStatus(StrEnum):
     FOUND = "found"
     EMPTY_LIBRARY = "empty_library"
+    COOLDOWN = "cooldown"
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,3 +143,5 @@ class UploadResult:
 class RecommendResult:
     status: RecommendStatus
     track: Track | None = None
+    image_base64: str | None = None
+    retry_after_seconds: int = 0

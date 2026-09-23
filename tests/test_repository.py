@@ -334,6 +334,29 @@ class TrackRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(limited.status, UploadLimitStatus.DAILY_LIMIT)
         self.assertEqual(reset.status, UploadLimitStatus.ALLOWED)
 
+    async def test_recommend_cooldown_persists_across_repository_instances(self) -> None:
+        now = datetime(2026, 9, 23, 10, 0, 0, tzinfo=UTC)
+        first = await self.repository.reserve_recommendation_attempt(
+            stream_id="stream-a",
+            cooldown_seconds=5,
+            now=now,
+        )
+        reopened = TrackRepository(self.db_path)
+        limited = await reopened.reserve_recommendation_attempt(
+            stream_id="stream-a",
+            cooldown_seconds=5,
+            now=datetime(2026, 9, 23, 10, 0, 2, tzinfo=UTC),
+        )
+        other_stream = await reopened.reserve_recommendation_attempt(
+            stream_id="stream-b",
+            cooldown_seconds=5,
+            now=datetime(2026, 9, 23, 10, 0, 2, tzinfo=UTC),
+        )
+
+        self.assertEqual(first, 0)
+        self.assertEqual(limited, 3)
+        self.assertEqual(other_stream, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
