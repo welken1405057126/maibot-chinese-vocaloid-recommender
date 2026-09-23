@@ -243,7 +243,7 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
 
     @Command(
         "update_chinese_vocaloid",
-        description="群友上传中v链接到库，参数 <B站链接>",
+        description="群友上传中v到曲库，参数 <B站链接或BV号>",
         pattern=r"(?i)^/上传中v\s+(?P<url>\S+)\s*$",
     )
     async def update_chinese_vocaloid(
@@ -296,7 +296,7 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
             "== 中v推荐 ==\n"
             "/中v推荐：随机一首中v\n"
             "/随机中v：随机一首中v\n"
-            "/上传中v <B站链接>：收录曲目\n"
+            "/上传中v <B站链接或BV号>：收录曲目\n"
             "/中v删除 <ID>：删除自己上传的曲目\n"
             "/中v帮助：显示本说明"
         )

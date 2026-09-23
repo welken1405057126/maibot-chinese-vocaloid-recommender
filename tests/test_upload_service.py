@@ -88,6 +88,16 @@ class UploadServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.track.cover_status, CoverStatus.CACHED)
         self.assertEqual(format_upload_reply(result), "收录成功，ID 1\n《测试曲目》")
 
+    async def test_accepts_bare_bvid(self) -> None:
+        result = await self.make_service().upload(
+            "BV0000000001",
+            stream_id="group-1",
+            user_id="user-1",
+            group_id="group-1",
+        )
+
+        self.assertEqual(result.status, UploadStatus.CREATED)
+
     async def test_cover_failure_silently_keeps_collected_track(self) -> None:
         result = await self.make_service(cover_fail=True).upload(
             VIDEO_URL,

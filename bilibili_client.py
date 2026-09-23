@@ -31,6 +31,7 @@ DEFAULT_USER_AGENT = "MaiBot-ChineseVocaloidRecommender/0.1"
 DEFAULT_REFERER = "https://www.bilibili.com/"
 
 _BVID_RE = re.compile(r"BV[A-Za-z0-9]{10}")
+_BARE_VIDEO_ID_RE = re.compile(r"(?P<video_id>BV[A-Za-z0-9]{10}|av[1-9][0-9]*)", re.IGNORECASE)
 _VIDEO_PATH_RE = re.compile(r"^/video/(?P<video_id>BV[A-Za-z0-9]{10}|av[1-9][0-9]*)/?$", re.IGNORECASE)
 _SHORT_PATH_RE = re.compile(r"^/[A-Za-z0-9_-]{2,64}/?$")
 
@@ -75,7 +76,7 @@ class VideoReference:
 
 
 def parse_video_reference(url: str) -> VideoReference:
-    """Parse an ordinary Bilibili video URL without making a network request."""
+    """Parse a Bilibili video identifier or ordinary URL without a request."""
 
     kind, value = _classify_user_url(url)
     if kind == "short":
@@ -85,7 +86,7 @@ def parse_video_reference(url: str) -> VideoReference:
 
 
 def validate_user_video_url(url: str) -> None:
-    """Validate an ordinary or short Bilibili video URL without requesting it."""
+    """Validate a Bilibili identifier, ordinary URL, or short URL locally."""
 
     _classify_user_url(url)
 
@@ -274,7 +275,12 @@ def _classify_user_url(url: str) -> tuple[str, VideoReference | str]:
     if len(url) > 2048:
         raise BilibiliLinkError("Bilibili link is too long")
 
-    parts, host = _split_safe_https_url(url.strip())
+    normalized_input = url.strip()
+    bare_match = _BARE_VIDEO_ID_RE.fullmatch(normalized_input)
+    if bare_match is not None:
+        return "video", _video_reference_from_id(bare_match.group("video_id"))
+
+    parts, host = _split_safe_https_url(normalized_input)
     normalized_url = urlunsplit(("https", host, parts.path, parts.query, ""))
     if host in SHORT_LINK_HOSTS:
         if _SHORT_PATH_RE.fullmatch(parts.path) is None:
@@ -286,10 +292,13 @@ def _classify_user_url(url: str) -> tuple[str, VideoReference | str]:
     match = _VIDEO_PATH_RE.fullmatch(parts.path)
     if match is None:
         raise BilibiliLinkError("link must point to one Bilibili video")
-    video_id = match.group("video_id")
+    return "video", _video_reference_from_id(match.group("video_id"))
+
+
+def _video_reference_from_id(video_id: str) -> VideoReference:
     if video_id[:2].casefold() == "bv":
-        return "video", VideoReference(bvid="BV" + video_id[2:])
-    return "video", VideoReference(aid=int(video_id[2:]))
+        return VideoReference(bvid="BV" + video_id[2:])
+    return VideoReference(aid=int(video_id[2:]))
 
 
 def _split_safe_https_url(url: str) -> tuple[Any, str]:

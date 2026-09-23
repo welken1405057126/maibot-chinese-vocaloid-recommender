@@ -93,6 +93,20 @@ class ParseVideoReferenceTests(unittest.TestCase):
         self.assertEqual(aid.aid, 123456)
         self.assertIsNone(aid.bvid)
 
+    def test_parses_bare_bvid_and_aid_locally(self) -> None:
+        bvid = parse_video_reference("bv1vFxXzWELU")
+        aid = parse_video_reference("AV123456")
+
+        self.assertEqual(bvid.bvid, "BV1vFxXzWELU")
+        self.assertEqual(aid.aid, 123456)
+
+    def test_rejects_malformed_bare_identifiers(self) -> None:
+        invalid_identifiers = ("BV1vFxXzWEL", "av0", "BV1vFxXzWELU extra", "not-a-video")
+
+        for identifier in invalid_identifiers:
+            with self.subTest(identifier=identifier), self.assertRaises(BilibiliLinkError):
+                parse_video_reference(identifier)
+
     def test_rejects_non_https_ports_userinfo_and_unlisted_hosts(self) -> None:
         unsafe_links = (
             "http://www.bilibili.com/video/BV1vFxXzWELU",
@@ -156,6 +170,19 @@ class BilibiliClientRequestTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(url, VIEW_API_URL)
         self.assertEqual(kwargs["params"], {"bvid": "BV1vFxXzWELU"})
         self.assertFalse(kwargs["allow_redirects"])
+
+    async def test_bare_bvid_calls_only_fixed_view_api(self) -> None:
+        body = json.dumps(make_payload()).encode()
+        session = FakeSession([FakeResponse(200, body=body)])
+        client = BilibiliClient(session=session)
+
+        metadata = await client.fetch_video_metadata("BV1vFxXzWELU")
+
+        self.assertEqual(metadata.bvid, "BV1vFxXzWELU")
+        self.assertEqual(len(session.calls), 1)
+        url, kwargs = session.calls[0]
+        self.assertEqual(url, VIEW_API_URL)
+        self.assertEqual(kwargs["params"], {"bvid": "BV1vFxXzWELU"})
 
     async def test_short_link_checks_redirect_before_calling_api(self) -> None:
         body = json.dumps(make_payload()).encode()
