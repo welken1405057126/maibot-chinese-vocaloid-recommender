@@ -38,6 +38,16 @@ class _SendRecorder:
         return self.hybrid_result
 
 
+class _ApiRecorder:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, object]]] = []
+        self.result: object = {"role": "member"}
+
+    async def call(self, api_name: str, **kwargs: object) -> object:
+        self.calls.append((api_name, kwargs))
+        return self.result
+
+
 @unittest.skipUnless(SDK_AVAILABLE, "MaiBot SDK is only available in the MaiBot virtual environment")
 class PluginLifecycleTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
@@ -45,11 +55,13 @@ class PluginLifecycleTests(unittest.IsolatedAsyncioTestCase):
         root = Path(self.temp_dir.name)
         self.data_dir = root / "data"
         self.send = _SendRecorder()
+        self.api = _ApiRecorder()
         self.plugin = create_plugin()
         self.plugin.set_plugin_config(self.plugin.build_default_config())
         self.plugin._set_context(
             SimpleNamespace(
                 paths=SimpleNamespace(data_dir=self.data_dir, runtime_dir=root / "runtime"),
+                api=self.api,
                 send=self.send,
                 logger=logging.getLogger("test.plugin"),
             )
@@ -126,6 +138,20 @@ class PluginLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((handled, summary, stop), (True, expected, True))
         self.assertEqual(self.send.text_messages, [(expected, "stream-a")])
         self.assertEqual(len(self.send.hybrid_messages), 1)
+
+    async def test_delete_command_uses_loaded_service_and_sends_reply(self) -> None:
+        await self._add_cached_track()
+
+        handled, summary, stop = await self.plugin.to_delete_chinese_vocaloid(
+            stream_id="stream-a",
+            user_id="user-1",
+            group_id="group-1",
+            matched_groups={"track_id": "1"},
+        )
+
+        self.assertEqual((handled, summary, stop), (True, "已删除曲目 1", True))
+        self.assertEqual(self.send.text_messages, [("已删除曲目 1", "stream-a")])
+        self.assertEqual(self.api.calls, [])
 
 
 if __name__ == "__main__":

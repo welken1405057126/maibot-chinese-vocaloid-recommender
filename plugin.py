@@ -10,17 +10,21 @@ from maibot_sdk import Command, Field, MaiBotPlugin, PluginConfigBase
 try:
     from .bilibili_client import BilibiliClient
     from .cover_cache import CoverCache
+    from .delete_service import DeleteService, format_delete_reply
     from .models import RecommendStatus
+    from .permissions import DeletePermissionChecker
+    from .recommend_service import RecommendService, format_recommend_reply
     from .repository import TrackRepository
     from .upload_service import UploadService, format_upload_reply
-    from .recommend_service import RecommendService, format_recommend_reply
 except ImportError:
     from bilibili_client import BilibiliClient  # type: ignore[no-redef]
     from cover_cache import CoverCache  # type: ignore[no-redef]
+    from delete_service import DeleteService, format_delete_reply  # type: ignore[no-redef]
     from models import RecommendStatus  # type: ignore[no-redef]
+    from permissions import DeletePermissionChecker  # type: ignore[no-redef]
+    from recommend_service import RecommendService, format_recommend_reply  # type: ignore[no-redef]
     from repository import TrackRepository  # type: ignore[no-redef]
     from upload_service import UploadService, format_upload_reply  # type: ignore[no-redef]
-    from recommend_service import RecommendService, format_recommend_reply  # type: ignore[no-redef]
 
 
 class PluginSectionConfig(PluginConfigBase):
@@ -131,6 +135,7 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
         self._repository: TrackRepository | None = None
         self._upload_service: UploadService | None = None
         self._recommend_service: RecommendService | None = None
+        self._delete_service: DeleteService | None = None
 
     async def on_load(self) -> None:
         data_dir = self.ctx.paths.data_dir
@@ -143,6 +148,7 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
     async def on_unload(self) -> None:
         self._upload_service = None
         self._recommend_service = None
+        self._delete_service = None
         self._repository = None
         self._data_dir = None
 
@@ -157,6 +163,7 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
         cache = self.config.cover_cache
         limits = self.config.rate_limit
         recommendation = self.config.recommendation
+        permission = self.config.permission
         bilibili_client = BilibiliClient(
             request_timeout_seconds=network.request_timeout_seconds,
             max_response_bytes=network.metadata_max_bytes,
@@ -187,6 +194,22 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
             recent_exclude_limit=recommendation.recent_exclusion_count,
             metadata_refresh_days=recommendation.metadata_refresh_days,
             cooldown_seconds=limits.recommend_cooldown_seconds,
+        )
+        self._delete_service = DeleteService(
+            self._repository,
+            DeletePermissionChecker(
+                global_admin_ids=permission.global_admin_ids,
+                allow_group_admin_delete=permission.allow_group_admin_delete,
+                group_member_lookup=self._get_group_member_info,
+            ),
+        )
+
+    async def _get_group_member_info(self, group_id: str, user_id: str) -> object:
+        return await self.ctx.api.call(
+            "adapter.napcat.group.get_group_member_info",
+            group_id=group_id,
+            user_id=user_id,
+            no_cache=True,
         )
 
     def _in_scope(self, group_id: str) -> bool:
@@ -276,10 +299,23 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
     async def to_delete_chinese_vocaloid(
         self, stream_id: str = "", user_id: str = "", group_id: str = "", **kwargs: Any
     ):
-        del user_id, kwargs
         if not self._in_scope(group_id):
             return True, "", True
-        return True, "", True
+        matched_groups = kwargs.get("matched_groups")
+        raw_track_id = (
+            str(matched_groups.get("track_id") or "").strip() if isinstance(matched_groups, dict) else ""
+        )
+        if not raw_track_id or not user_id or self._delete_service is None:
+            reply = "曲库没这ID"
+        else:
+            result = await self._delete_service.delete(
+                int(raw_track_id),
+                user_id=str(user_id),
+                group_id=str(group_id).strip() or None,
+            )
+            reply = format_delete_reply(result)
+        await self.ctx.send.text(reply, stream_id)
+        return True, reply, True
 
     @Command(
         "help_chinese_vocaloid",

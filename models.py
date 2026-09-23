@@ -23,6 +23,12 @@ class DeleteStatus(StrEnum):
     ALREADY_DELETED = "already_deleted"
 
 
+class DeleteRequestStatus(StrEnum):
+    DELETED = "deleted"
+    NOT_FOUND = "not_found"
+    FORBIDDEN = "forbidden"
+
+
 class UploadLimitStatus(StrEnum):
     ALLOWED = "allowed"
     COOLDOWN = "cooldown"
@@ -124,6 +130,12 @@ class AddTrackResult:
 class DeleteTrackResult:
     status: DeleteStatus
     track: Track | None
+
+
+@dataclass(frozen=True, slots=True)
+class DeleteRequestResult:
+    status: DeleteRequestStatus
+    track_id: int
 
 
 @dataclass(frozen=True, slots=True)
