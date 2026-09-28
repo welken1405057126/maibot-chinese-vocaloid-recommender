@@ -20,6 +20,7 @@ def make_track(*, uploader_id: str = "uploader", group_id: str | None = "group-1
         aid=10001,
         canonical_url="https://www.bilibili.com/video/BV0000000001",
         title="测试曲目",
+        video_owner_name="测试UP主",
         cover_url="https://i0.hdslb.com/test.jpg",
         cover_path=None,
         cover_status=CoverStatus.MISSING,

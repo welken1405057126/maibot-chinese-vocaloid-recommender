@@ -25,9 +25,11 @@ class FakeBilibiliClient:
     def __init__(self, *, fail: bool = False) -> None:
         self.fail = fail
         self.calls = 0
+        self.inputs: list[str] = []
 
     async def fetch_video_metadata(self, url: str) -> VideoMetadata:
         self.calls += 1
+        self.inputs.append(url)
         if self.fail:
             raise BilibiliNetworkError("offline")
         return VideoMetadata(
@@ -35,6 +37,7 @@ class FakeBilibiliClient:
             aid=10001,
             title="测试曲目",
             cover_url="https://i0.hdslb.com/test.jpg",
+            owner_name="测试UP主",
             view_count=123,
         )
 
@@ -97,6 +100,27 @@ class UploadServiceTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(result.status, UploadStatus.CREATED)
+
+    async def test_extracts_short_link_from_prefixed_text(self) -> None:
+        client = FakeBilibiliClient()
+        service = UploadService(
+            self.repository,
+            client,
+            FakeCoverCache(),
+            cooldown_seconds=0,
+            daily_limit=0,
+            stream_attempts_per_minute=0,
+        )
+
+        result = await service.upload(
+            "【乐正绫原创】名为星星的太阳【HB to 星葵】-哔哩哔哩 https://b23.tv/jgGZIhg ，",
+            stream_id="group-1",
+            user_id="user-1",
+            group_id="group-1",
+        )
+
+        self.assertEqual(result.status, UploadStatus.CREATED)
+        self.assertEqual(client.inputs, ["https://b23.tv/jgGZIhg"])
 
     async def test_cover_failure_silently_keeps_collected_track(self) -> None:
         result = await self.make_service(cover_fail=True).upload(

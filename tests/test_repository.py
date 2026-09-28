@@ -36,6 +36,7 @@ def make_track(
             aid=10_000 + number,
             title=f"Track {number}",
             cover_url=f"https://i0.hdslb.com/{bvid}.jpg",
+            owner_name=f"UP {number}",
             view_count=number * 100,
         ),
         canonical_url=f"https://www.bilibili.com/video/{bvid}",
@@ -65,11 +66,68 @@ class TrackRepositoryTests(unittest.IsolatedAsyncioTestCase):
         finally:
             connection.close()
         self.assertTrue(
-            {"bvid", "aid", "video_state", "view_count", "metadata_refreshed_at"} <= columns
+            {"bvid", "aid", "video_owner_name", "video_state", "view_count", "metadata_refreshed_at"}
+            <= columns
         )
         self.assertTrue(
-            {"duration", "video_owner_mid", "video_owner_name", "uploader_name", "like_count"}.isdisjoint(columns)
+            {"duration", "video_owner_mid", "uploader_name", "like_count"}.isdisjoint(columns)
         )
+
+    async def test_migrates_v1_database_without_losing_tracks(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "legacy.sqlite3"
+        connection = sqlite3.connect(legacy_path)
+        try:
+            connection.executescript(
+                """
+                CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1');
+                CREATE TABLE tracks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    bvid TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                    aid INTEGER NOT NULL UNIQUE,
+                    canonical_url TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    cover_url TEXT NOT NULL,
+                    cover_path TEXT,
+                    cover_status TEXT NOT NULL,
+                    cover_cached_at TEXT,
+                    cover_last_accessed_at TEXT,
+                    video_state INTEGER NOT NULL DEFAULT 0,
+                    view_count INTEGER NOT NULL DEFAULT 0,
+                    metadata_refreshed_at TEXT NOT NULL,
+                    uploader_id TEXT NOT NULL,
+                    origin_group_id TEXT,
+                    origin_stream_id TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    created_at TEXT NOT NULL,
+                    deleted_at TEXT,
+                    deleted_by TEXT
+                );
+                INSERT INTO tracks (
+                    bvid, aid, canonical_url, title, cover_url, cover_status,
+                    metadata_refreshed_at, uploader_id, origin_stream_id, status, created_at
+                ) VALUES (
+                    'BV0000000001', 10001, 'https://www.bilibili.com/video/BV0000000001',
+                    'Legacy Track', 'https://i0.hdslb.com/legacy.jpg', 'missing',
+                    '2026-09-20T00:00:00+00:00', 'user-1', 'group-1', 'active',
+                    '2026-09-20T00:00:00+00:00'
+                );
+                """
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        legacy_repository = TrackRepository(legacy_path)
+        await legacy_repository.initialize()
+        migrated = await legacy_repository.get_track_by_id(1)
+
+        self.assertEqual(await legacy_repository.get_schema_version(), 2)
+        self.assertIsNotNone(migrated)
+        assert migrated is not None
+        self.assertEqual(migrated.title, "Legacy Track")
+        self.assertEqual(migrated.video_owner_name, "")
+        self.assertTrue(legacy_repository.metadata_is_stale(migrated))
 
     async def test_adds_and_persists_track(self) -> None:
         result = await self.repository.add_track(make_track(1), now="2026-09-22T10:00:00+00:00")
@@ -95,6 +153,7 @@ class TrackRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 aid=99999,
                 title="Duplicate by BVID",
                 cover_url="https://i0.hdslb.com/duplicate.jpg",
+                owner_name="Duplicate UP",
             ),
             canonical_url="https://www.bilibili.com/video/duplicate",
             uploader_id="2",
@@ -107,6 +166,7 @@ class TrackRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 aid=first.track.aid,
                 title=duplicate_aid.metadata.title,
                 cover_url=duplicate_aid.metadata.cover_url,
+                owner_name=duplicate_aid.metadata.owner_name,
             ),
             canonical_url=duplicate_aid.canonical_url,
             uploader_id=duplicate_aid.uploader_id,
@@ -221,6 +281,7 @@ class TrackRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 aid=track.aid,
                 title="Updated title",
                 cover_url="https://i0.hdslb.com/updated.jpg",
+                owner_name="Updated UP",
                 state=0,
                 view_count=999,
             ),
@@ -230,6 +291,7 @@ class TrackRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(refreshed)
         assert refreshed is not None
         self.assertEqual(refreshed.title, "Updated title")
+        self.assertEqual(refreshed.video_owner_name, "Updated UP")
         self.assertEqual(refreshed.view_count, 999)
         self.assertEqual(refreshed.metadata_refreshed_at, "2026-09-22T10:00:00+00:00")
 

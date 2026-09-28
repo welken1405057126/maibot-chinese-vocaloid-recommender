@@ -14,7 +14,7 @@ if str(PLUGIN_DIR) not in sys.path:
 from bilibili_client import BilibiliNetworkError  # noqa: E402
 from cover_cache import CachedCover, CoverDownloadError  # noqa: E402
 from models import CoverStatus, NewTrack, RecommendStatus, VideoMetadata  # noqa: E402
-from recommend_service import RecommendService, format_recommend_reply  # noqa: E402
+from recommend_service import RecommendService, format_recommend_reply, format_view_count  # noqa: E402
 from repository import TrackRepository  # noqa: E402
 
 
@@ -31,6 +31,8 @@ def make_track(
             aid=10_000 + number,
             title=f"Track {number}",
             cover_url=f"https://i0.hdslb.com/{bvid}.jpg",
+            owner_name=f"UP {number}",
+            view_count=123_456,
         ),
         canonical_url=f"https://www.bilibili.com/video/{bvid}",
         uploader_id="user-1",
@@ -122,7 +124,10 @@ class RecommendServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.image_base64, base64.b64encode(b"cover-bytes").decode("ascii"))
         self.assertEqual(
             format_recommend_reply(result),
-            "推荐\n《Track 1》\nhttps://www.bilibili.com/video/BV0000000001",
+            "---- 随机推荐(≧▽≦) ----\n"
+            "Track 1\n"
+            "UP 1 · 12.3万播放\n\n"
+            "https://www.bilibili.com/video/BV0000000001",
         )
         self.assertEqual(await self.repository.get_recent_recommendation_ids("stream-a", 1), [track.id])
 
@@ -175,6 +180,7 @@ class RecommendServiceTests(unittest.IsolatedAsyncioTestCase):
             aid=10001,
             title="Updated Track",
             cover_url="https://i1.hdslb.com/updated.jpg",
+            owner_name="Updated UP",
             view_count=999,
         )
         client = FakeBilibiliClient(metadata)
@@ -188,7 +194,23 @@ class RecommendServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(result.track)
         assert result.track is not None
         self.assertEqual(result.track.title, "Updated Track")
+        self.assertEqual(result.track.video_owner_name, "Updated UP")
         self.assertEqual(result.track.view_count, 999)
+
+    def test_formats_view_count_with_requested_rounding(self) -> None:
+        expected = {
+            0: "0播放",
+            8_848: "8848播放",
+            9_999: "9999播放",
+            10_000: "1.0万播放",
+            20_000: "2.0万播放",
+            1_357_000: "135.7万播放",
+            21_487_000: "2148.7万播放",
+            10_500: "1.1万播放",
+        }
+        for count, text in expected.items():
+            with self.subTest(count=count):
+                self.assertEqual(format_view_count(count), text)
 
     async def test_metadata_failure_uses_stored_track(self) -> None:
         await self.repository.add_track(make_track(1), now="2026-09-20T10:00:00+00:00")

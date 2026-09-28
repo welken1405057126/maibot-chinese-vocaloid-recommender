@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import re
 import sys
 import tempfile
 import unittest
@@ -85,6 +86,8 @@ class PluginLifecycleTests(unittest.IsolatedAsyncioTestCase):
                     aid=10001,
                     title="Lifecycle Track",
                     cover_url="https://i0.hdslb.com/lifecycle.jpg",
+                    owner_name="Lifecycle UP",
+                    view_count=123_456,
                 ),
                 canonical_url="https://www.bilibili.com/video/BV0000000001",
                 uploader_id="user-1",
@@ -107,7 +110,12 @@ class PluginLifecycleTests(unittest.IsolatedAsyncioTestCase):
             group_id="group-1",
         )
 
-        expected = "推荐\n《Lifecycle Track》\nhttps://www.bilibili.com/video/BV0000000001"
+        expected = (
+            "---- 随机推荐(≧▽≦) ----\n"
+            "Lifecycle Track\n"
+            "Lifecycle UP · 12.3万播放\n\n"
+            "https://www.bilibili.com/video/BV0000000001"
+        )
         self.assertEqual((handled, summary, stop), (True, expected, True))
         self.assertEqual(self.send.text_messages, [])
         self.assertEqual(
@@ -115,14 +123,60 @@ class PluginLifecycleTests(unittest.IsolatedAsyncioTestCase):
             [
                 (
                     [
-                        {"type": "text", "content": "推荐\n《Lifecycle Track》"},
+                        {"type": "text", "content": "---- 随机推荐(≧▽≦) ----\n"},
                         {"type": "image", "content": base64.b64encode(cover_body).decode("ascii")},
-                        {"type": "text", "content": "https://www.bilibili.com/video/BV0000000001"},
+                        {
+                            "type": "text",
+                            "content": (
+                                "\nLifecycle Track\nLifecycle UP · 12.3万播放\n\n"
+                                "https://www.bilibili.com/video/BV0000000001"
+                            ),
+                        },
                     ],
                     "stream-a",
                 )
             ],
         )
+
+    def test_recommend_command_uses_only_requested_names(self) -> None:
+        info = self.plugin.recommend_chinese_vocaloid.__maibot_component_info__
+        pattern = re.compile(info.command_pattern)
+
+        for command in ("/来首中v", "/随机中v", "/中v随机"):
+            with self.subTest(command=command):
+                self.assertIsNotNone(pattern.fullmatch(command))
+        for removed_command in ("/中v推荐", "/推荐中v"):
+            with self.subTest(command=removed_command):
+                self.assertIsNone(pattern.fullmatch(removed_command))
+
+    async def test_upload_command_without_argument_returns_invalid_link_reply(self) -> None:
+        info = self.plugin.update_chinese_vocaloid.__maibot_component_info__
+        pattern = re.compile(info.command_pattern)
+        match = pattern.fullmatch("/上传中v")
+        self.assertIsNotNone(match)
+        assert match is not None
+
+        handled, summary, stop = await self.plugin.update_chinese_vocaloid(
+            stream_id="stream-a",
+            user_id="user-1",
+            group_id="group-1",
+            matched_groups=match.groupdict(),
+        )
+
+        expected = "链接不对，只收B站视频链接"
+        self.assertEqual((handled, summary, stop), (True, expected, True))
+        self.assertEqual(self.send.text_messages, [(expected, "stream-a")])
+
+    def test_upload_command_captures_prefixed_title_and_link(self) -> None:
+        info = self.plugin.update_chinese_vocaloid.__maibot_component_info__
+        pattern = re.compile(info.command_pattern)
+        user_input = "【乐正绫原创】名为星星的太阳【HB to 星葵】-哔哩哔哩 https://b23.tv/jgGZIhg ，"
+
+        match = pattern.fullmatch(f"/上传中v {user_input}")
+
+        self.assertIsNotNone(match)
+        assert match is not None
+        self.assertEqual(match.group("input"), user_input)
 
     async def test_hybrid_send_failure_falls_back_to_text(self) -> None:
         await self._add_cached_track()
@@ -134,7 +188,12 @@ class PluginLifecycleTests(unittest.IsolatedAsyncioTestCase):
             group_id="group-1",
         )
 
-        expected = "推荐\n《Lifecycle Track》\nhttps://www.bilibili.com/video/BV0000000001"
+        expected = (
+            "---- 随机推荐(≧▽≦) ----\n"
+            "Lifecycle Track\n"
+            "Lifecycle UP · 12.3万播放\n\n"
+            "https://www.bilibili.com/video/BV0000000001"
+        )
         self.assertEqual((handled, summary, stop), (True, expected, True))
         self.assertEqual(self.send.text_messages, [(expected, "stream-a")])
         self.assertEqual(len(self.send.hybrid_messages), 1)

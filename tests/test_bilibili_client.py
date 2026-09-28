@@ -19,6 +19,7 @@ from bilibili_client import (  # noqa: E402
     BilibiliResponseError,
     BilibiliResponseTooLarge,
     canonical_video_url,
+    extract_video_candidate,
     parse_video_metadata,
     parse_video_reference,
 )
@@ -33,6 +34,7 @@ def make_payload() -> dict[str, object]:
             "aid": 123456,
             "title": " Test\n title ",
             "pic": "http://i0.hdslb.com/test.jpg",
+            "owner": {"mid": 42, "name": "测试UP主"},
             "state": 0,
             "stat": {"view": 9876},
         },
@@ -120,6 +122,18 @@ class ParseVideoReferenceTests(unittest.TestCase):
             with self.subTest(link=link), self.assertRaises(BilibiliLinkError):
                 parse_video_reference(link)
 
+    def test_extracts_video_candidate_from_prefixed_command_text(self) -> None:
+        self.assertEqual(
+            extract_video_candidate("【乐正绫原创】名为星星的太阳【HB to 星葵】 https://b23.tv/jgGZIhg ，"),
+            "https://b23.tv/jgGZIhg",
+        )
+        self.assertEqual(extract_video_candidate("标题文字 BV16veP6eEeC。"), "BV16veP6eEeC")
+
+    def test_candidate_extraction_rejects_missing_or_unlisted_links(self) -> None:
+        for user_input in ("", "只有标题", "标题 https://example.com/BV16veP6eEeC"):
+            with self.subTest(user_input=user_input), self.assertRaises(BilibiliLinkError):
+                extract_video_candidate(user_input)
+
 
 class ParseVideoMetadataTests(unittest.TestCase):
     def test_maps_required_fields_and_normalizes_values(self) -> None:
@@ -129,6 +143,7 @@ class ParseVideoMetadataTests(unittest.TestCase):
         self.assertEqual(metadata.aid, 123456)
         self.assertEqual(metadata.title, "Test title")
         self.assertEqual(metadata.cover_url, "https://i0.hdslb.com/test.jpg")
+        self.assertEqual(metadata.owner_name, "测试UP主")
         self.assertEqual(metadata.state, 0)
         self.assertEqual(metadata.view_count, 9876)
         self.assertEqual(canonical_video_url(metadata), "https://www.bilibili.com/video/BV1vFxXzWELU")

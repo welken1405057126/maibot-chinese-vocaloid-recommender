@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 from datetime import UTC, datetime
+from decimal import ROUND_HALF_UP, Decimal
 
 try:
     from .bilibili_client import BilibiliClient, BilibiliClientError
@@ -136,15 +137,37 @@ class RecommendService:
         return track, base64.b64encode(body).decode("ascii")
 
 
+RECOMMEND_HEADER = "---- 随机推荐(≧▽≦) ----"
+
+
 def format_recommend_reply(result: RecommendResult) -> str:
     if result.status is RecommendStatus.FOUND and result.track is not None:
-        track = result.track
-        return f"推荐\n《{track.title}》\n{track.canonical_url}"
+        return f"{RECOMMEND_HEADER}\n{format_recommend_body(result.track)}"
     if result.status is RecommendStatus.EMPTY_LIBRARY:
         return "曲库还没歌，先 /上传中v 传一首"
     if result.status is RecommendStatus.COOLDOWN:
         return f"缓会，{max(1, result.retry_after_seconds)}秒后再推荐"
     return "推荐失败了，待会再试"
+
+
+def format_recommend_body(track: Track) -> str:
+    owner_name = track.video_owner_name.strip() or "UP主未知"
+    return (
+        f"{track.title}\n"
+        f"{owner_name} · {format_view_count(track.view_count)}\n\n"
+        f"{track.canonical_url}"
+    )
+
+
+def format_view_count(view_count: int) -> str:
+    normalized_count = max(0, int(view_count))
+    if normalized_count < 10_000:
+        return f"{normalized_count}播放"
+    value_in_ten_thousands = (Decimal(normalized_count) / Decimal(10_000)).quantize(
+        Decimal("0.1"),
+        rounding=ROUND_HALF_UP,
+    )
+    return f"{value_in_ten_thousands:.1f}万播放"
 
 
 def _as_utc(value: datetime) -> datetime:

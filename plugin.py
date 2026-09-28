@@ -13,7 +13,12 @@ try:
     from .delete_service import DeleteService, format_delete_reply
     from .models import RecommendStatus
     from .permissions import DeletePermissionChecker
-    from .recommend_service import RecommendService, format_recommend_reply
+    from .recommend_service import (
+        RECOMMEND_HEADER,
+        RecommendService,
+        format_recommend_body,
+        format_recommend_reply,
+    )
     from .repository import TrackRepository
     from .upload_service import UploadService, format_upload_reply
 except ImportError:
@@ -22,7 +27,12 @@ except ImportError:
     from delete_service import DeleteService, format_delete_reply  # type: ignore[no-redef]
     from models import RecommendStatus  # type: ignore[no-redef]
     from permissions import DeletePermissionChecker  # type: ignore[no-redef]
-    from recommend_service import RecommendService, format_recommend_reply  # type: ignore[no-redef]
+    from recommend_service import (  # type: ignore[no-redef]
+        RECOMMEND_HEADER,
+        RecommendService,
+        format_recommend_body,
+        format_recommend_reply,
+    )
     from repository import TrackRepository  # type: ignore[no-redef]
     from upload_service import UploadService, format_upload_reply  # type: ignore[no-redef]
 
@@ -224,7 +234,7 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
     @Command(
         "recommend_chinese_vocaloid",
         description="推荐一首中v，发布中v的b站链接",
-        pattern=r"(?i)^/(?:中v推荐|随机中v)\s*$",
+        pattern=r"(?i)^/(?:来首中v|随机中v|中v随机)\s*$",
     )
     async def recommend_chinese_vocaloid(
         self, stream_id: str = "", user_id: str = "", group_id: str = "", **kwargs: Any
@@ -249,9 +259,9 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
             and result.image_base64 is not None
         ):
             segments = [
-                {"type": "text", "content": f"推荐\n《{result.track.title}》"},
+                {"type": "text", "content": f"{RECOMMEND_HEADER}\n"},
                 {"type": "image", "content": result.image_base64},
-                {"type": "text", "content": result.track.canonical_url},
+                {"type": "text", "content": f"\n{format_recommend_body(result.track)}"},
             ]
             try:
                 sent = await self.ctx.send.hybrid(segments, stream_id)
@@ -266,8 +276,8 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
 
     @Command(
         "update_chinese_vocaloid",
-        description="群友上传中v到曲库，参数 <B站链接或BV号>",
-        pattern=r"(?i)^/上传中v\s+(?P<url>\S+)\s*$",
+        description="群友上传中v到曲库，可附带标题，参数含 <B站链接或BV号>",
+        pattern=r"(?i)^/上传中v(?:\s+(?P<input>[\s\S]*?))?\s*$",
     )
     async def update_chinese_vocaloid(
         self, stream_id: str = "", user_id: str = "", group_id: str = "", **kwargs: Any
@@ -275,14 +285,16 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
         if not self._in_scope(group_id):
             return True, "", True
         matched_groups = kwargs.get("matched_groups")
-        url = str(matched_groups.get("url") or "").strip() if isinstance(matched_groups, dict) else ""
-        if not url:
+        user_input = (
+            str(matched_groups.get("input") or "").strip() if isinstance(matched_groups, dict) else ""
+        )
+        if not user_input:
             reply = "链接不对，只收B站视频链接"
         elif not stream_id or not user_id or self._upload_service is None:
             reply = "B站没回应，待会再试"
         else:
             result = await self._upload_service.upload(
-                url,
+                user_input,
                 stream_id=str(stream_id),
                 user_id=str(user_id),
                 group_id=str(group_id).strip() or None,
@@ -329,9 +341,8 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
         if not self._in_scope(group_id):
             return True, "", True
         text = (
-            "== 中v推荐 ==\n"
-            "/中v推荐：随机一首中v\n"
-            "/随机中v：随机一首中v\n"
+            "== 中v曲库 ==\n"
+            "/来首中v、/随机中v、/中v随机：随机一首中v\n"
             "/上传中v <B站链接或BV号>：收录曲目\n"
             "/中v删除 <ID>：删除自己上传的曲目\n"
             "/中v帮助：显示本说明"

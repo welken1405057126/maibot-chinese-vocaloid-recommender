@@ -37,7 +37,7 @@ except ImportError:
     )
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def utc_now_iso() -> str:
@@ -81,6 +81,7 @@ class TrackRepository:
                         aid INTEGER NOT NULL UNIQUE,
                         canonical_url TEXT NOT NULL,
                         title TEXT NOT NULL,
+                        video_owner_name TEXT NOT NULL DEFAULT '',
                         cover_url TEXT NOT NULL,
                         cover_path TEXT,
                         cover_status TEXT NOT NULL
@@ -129,6 +130,11 @@ class TrackRepository:
                         ON command_events(event_type, user_id, created_at);
                     """
                 )
+                columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(tracks)")}
+                if "video_owner_name" not in columns:
+                    connection.execute(
+                        "ALTER TABLE tracks ADD COLUMN video_owner_name TEXT NOT NULL DEFAULT ''"
+                    )
                 connection.execute(
                     """
                     INSERT INTO schema_meta(key, value) VALUES('schema_version', ?)
@@ -332,18 +338,19 @@ class TrackRepository:
                     cursor = connection.execute(
                         """
                         INSERT INTO tracks (
-                            bvid, aid, canonical_url, title, cover_url, cover_path,
+                            bvid, aid, canonical_url, title, video_owner_name, cover_url, cover_path,
                             cover_status, cover_cached_at, video_state,
                             view_count, metadata_refreshed_at, uploader_id,
                             origin_group_id, origin_stream_id,
                             status, created_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             metadata.bvid,
                             metadata.aid,
                             new_track.canonical_url,
                             metadata.title,
+                            metadata.owner_name,
                             metadata.cover_url,
                             new_track.cover_path,
                             new_track.cover_status.value,
@@ -603,12 +610,13 @@ class TrackRepository:
                 cursor = connection.execute(
                     """
                     UPDATE tracks
-                    SET title = ?, cover_url = ?, video_state = ?, view_count = ?,
+                    SET title = ?, video_owner_name = ?, cover_url = ?, video_state = ?, view_count = ?,
                         metadata_refreshed_at = ?
                     WHERE id = ? AND bvid = ? COLLATE NOCASE AND aid = ?
                     """,
                     (
                         metadata.title,
+                        metadata.owner_name,
                         metadata.cover_url,
                         metadata.state,
                         metadata.view_count,
@@ -638,6 +646,8 @@ class TrackRepository:
     ) -> bool:
         """Return whether Bilibili metadata should be refreshed before display."""
 
+        if not track.video_owner_name.strip():
+            return True
         try:
             refreshed_at = datetime.fromisoformat(track.metadata_refreshed_at)
         except ValueError:
@@ -666,6 +676,7 @@ class TrackRepository:
             aid=int(row["aid"]),
             canonical_url=str(row["canonical_url"]),
             title=str(row["title"]),
+            video_owner_name=str(row["video_owner_name"]),
             cover_url=str(row["cover_url"]),
             cover_path=str(row["cover_path"]) if row["cover_path"] is not None else None,
             cover_status=CoverStatus(str(row["cover_status"])),

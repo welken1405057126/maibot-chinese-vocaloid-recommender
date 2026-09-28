@@ -34,6 +34,11 @@ _BVID_RE = re.compile(r"BV[A-Za-z0-9]{10}")
 _BARE_VIDEO_ID_RE = re.compile(r"(?P<video_id>BV[A-Za-z0-9]{10}|av[1-9][0-9]*)", re.IGNORECASE)
 _VIDEO_PATH_RE = re.compile(r"^/video/(?P<video_id>BV[A-Za-z0-9]{10}|av[1-9][0-9]*)/?$", re.IGNORECASE)
 _SHORT_PATH_RE = re.compile(r"^/[A-Za-z0-9_-]{2,64}/?$")
+_INPUT_CANDIDATE_RE = re.compile(
+    r"https://[^\s]+|(?<![A-Za-z0-9])(?:BV[A-Za-z0-9]{10}|av[1-9][0-9]*)(?![A-Za-z0-9])",
+    re.IGNORECASE,
+)
+_TRAILING_INPUT_PUNCTUATION = "\"'.,!?;:，。！？；：、】》）)]}>"
 
 
 class BilibiliClientError(RuntimeError):
@@ -89,6 +94,28 @@ def validate_user_video_url(url: str) -> None:
     """Validate a Bilibili identifier, ordinary URL, or short URL locally."""
 
     _classify_user_url(url)
+
+
+def extract_video_candidate(user_input: str) -> str:
+    """Extract the first valid Bilibili identifier or URL from command text."""
+
+    if not isinstance(user_input, str) or not user_input.strip() or len(user_input) > 4096:
+        raise BilibiliLinkError("Bilibili input is empty or too long")
+    normalized_input = user_input.strip()
+    try:
+        validate_user_video_url(normalized_input)
+        return normalized_input
+    except BilibiliLinkError:
+        pass
+
+    for match in _INPUT_CANDIDATE_RE.finditer(normalized_input):
+        candidate = match.group(0).rstrip(_TRAILING_INPUT_PUNCTUATION)
+        try:
+            validate_user_video_url(candidate)
+        except BilibiliLinkError:
+            continue
+        return candidate
+    raise BilibiliLinkError("no valid Bilibili video identifier or URL found")
 
 
 def canonical_video_url(metadata: VideoMetadata) -> str:
@@ -249,6 +276,7 @@ def parse_video_metadata(payload: Mapping[str, Any]) -> VideoMetadata:
 
     data = _require_mapping(payload.get("data"), "data")
     stats = _require_mapping(data.get("stat"), "data.stat")
+    owner = _require_mapping(data.get("owner"), "data.owner")
     bvid = _require_str(data.get("bvid"), "data.bvid")
     if _BVID_RE.fullmatch(bvid) is None:
         raise BilibiliResponseError("data.bvid has an invalid format")
@@ -264,6 +292,7 @@ def parse_video_metadata(payload: Mapping[str, Any]) -> VideoMetadata:
         aid=_require_int(data.get("aid"), "data.aid"),
         title=_sanitize_title(_require_str(data.get("title"), "data.title")),
         cover_url=cover_url,
+        owner_name=_sanitize_title(_require_str(owner.get("name"), "data.owner.name")),
         state=_require_int(data.get("state"), "data.state"),
         view_count=view_count,
     )

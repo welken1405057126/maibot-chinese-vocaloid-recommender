@@ -75,6 +75,7 @@ def make_track(
         aid=10_000 + track_id,
         canonical_url=f"https://www.bilibili.com/video/{bvid}",
         title=f"Track {track_id}",
+        video_owner_name=f"UP {track_id}",
         cover_url=f"https://i0.hdslb.com/{bvid}.jpg",
         cover_path=cover_path,
         cover_status=CoverStatus.CACHED,

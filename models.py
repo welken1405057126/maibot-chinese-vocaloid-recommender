@@ -61,6 +61,7 @@ class VideoMetadata:
     aid: int
     title: str
     cover_url: str
+    owner_name: str
     state: int = 0
     view_count: int = 0
 
@@ -73,6 +74,8 @@ class VideoMetadata:
             raise ValueError("title cannot be empty")
         if not self.cover_url.strip():
             raise ValueError("cover_url cannot be empty")
+        if not self.owner_name.strip():
+            raise ValueError("owner_name cannot be empty")
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +106,7 @@ class Track:
     aid: int
     canonical_url: str
     title: str
+    video_owner_name: str
     cover_url: str
     cover_path: str | None
     cover_status: CoverStatus

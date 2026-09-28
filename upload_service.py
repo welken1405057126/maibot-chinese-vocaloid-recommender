@@ -10,7 +10,7 @@ try:
         BilibiliClientError,
         BilibiliLinkError,
         canonical_video_url,
-        validate_user_video_url,
+        extract_video_candidate,
     )
     from .cover_cache import CoverCache, CoverCacheError
     from .models import (
@@ -28,7 +28,7 @@ except ImportError:
         BilibiliClientError,
         BilibiliLinkError,
         canonical_video_url,
-        validate_user_video_url,
+        extract_video_candidate,
     )
     from cover_cache import CoverCache, CoverCacheError  # type: ignore[no-redef]
     from models import (  # type: ignore[no-redef]
@@ -67,7 +67,7 @@ class UploadService:
 
     async def upload(
         self,
-        url: str,
+        user_input: str,
         *,
         stream_id: str,
         user_id: str,
@@ -75,7 +75,7 @@ class UploadService:
         now: datetime | None = None,
     ) -> UploadResult:
         try:
-            validate_user_video_url(url)
+            video_candidate = extract_video_candidate(user_input)
         except BilibiliLinkError:
             return UploadResult(UploadStatus.INVALID_LINK)
 
@@ -98,7 +98,7 @@ class UploadService:
             )
 
         try:
-            metadata = await self.bilibili_client.fetch_video_metadata(url)
+            metadata = await self.bilibili_client.fetch_video_metadata(video_candidate)
         except BilibiliLinkError:
             return UploadResult(UploadStatus.INVALID_LINK)
         except BilibiliClientError:

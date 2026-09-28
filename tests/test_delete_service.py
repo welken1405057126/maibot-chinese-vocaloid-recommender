@@ -22,6 +22,7 @@ def make_track(*, uploader_id: str = "uploader", group_id: str | None = "group-1
             aid=10001,
             title="测试曲目",
             cover_url="https://i0.hdslb.com/test.jpg",
+            owner_name="测试UP主",
         ),
         canonical_url="https://www.bilibili.com/video/BV0000000001",
         uploader_id=uploader_id,
