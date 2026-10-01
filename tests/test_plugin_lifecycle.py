@@ -111,9 +111,10 @@ class PluginLifecycleTests(unittest.IsolatedAsyncioTestCase):
         )
 
         expected = (
-            "---- 随机推荐(≧▽≦) ----\n"
+            "----- 随机推荐(≧▽≦) -----\n"
             "Lifecycle Track\n"
-            "Lifecycle UP · 12.3万播放\n\n"
+            "Lifecycle UP · 12.3万播放\n"
+            "--------------------------\n"
             "https://www.bilibili.com/video/BV0000000001"
         )
         self.assertEqual((handled, summary, stop), (True, expected, True))
@@ -123,12 +124,13 @@ class PluginLifecycleTests(unittest.IsolatedAsyncioTestCase):
             [
                 (
                     [
-                        {"type": "text", "content": "---- 随机推荐(≧▽≦) ----\n"},
+                        {"type": "text", "content": "----- 随机推荐(≧▽≦) -----\n"},
                         {"type": "image", "content": base64.b64encode(cover_body).decode("ascii")},
                         {
                             "type": "text",
                             "content": (
-                                "\nLifecycle Track\nLifecycle UP · 12.3万播放\n\n"
+                                "\nLifecycle Track\nLifecycle UP · 12.3万播放\n"
+                                "--------------------------\n"
                                 "https://www.bilibili.com/video/BV0000000001"
                             ),
                         },
@@ -189,9 +191,10 @@ class PluginLifecycleTests(unittest.IsolatedAsyncioTestCase):
         )
 
         expected = (
-            "---- 随机推荐(≧▽≦) ----\n"
+            "----- 随机推荐(≧▽≦) -----\n"
             "Lifecycle Track\n"
-            "Lifecycle UP · 12.3万播放\n\n"
+            "Lifecycle UP · 12.3万播放\n"
+            "--------------------------\n"
             "https://www.bilibili.com/video/BV0000000001"
         )
         self.assertEqual((handled, summary, stop), (True, expected, True))

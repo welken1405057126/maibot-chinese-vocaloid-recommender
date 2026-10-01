@@ -137,7 +137,7 @@ class RecommendService:
         return track, base64.b64encode(body).decode("ascii")
 
 
-RECOMMEND_HEADER = "---- 随机推荐(≧▽≦) ----"
+RECOMMEND_HEADER = "----- 随机推荐(≧▽≦) -----"
 
 
 def format_recommend_reply(result: RecommendResult) -> str:
@@ -154,7 +154,8 @@ def format_recommend_body(track: Track) -> str:
     owner_name = track.video_owner_name.strip() or "UP主未知"
     return (
         f"{track.title}\n"
-        f"{owner_name} · {format_view_count(track.view_count)}\n\n"
+        f"{owner_name} · {format_view_count(track.view_count)}\n"
+        "--------------------------\n"
         f"{track.canonical_url}"
     )
 

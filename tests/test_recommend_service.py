@@ -124,9 +124,10 @@ class RecommendServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.image_base64, base64.b64encode(b"cover-bytes").decode("ascii"))
         self.assertEqual(
             format_recommend_reply(result),
-            "---- 随机推荐(≧▽≦) ----\n"
+            "----- 随机推荐(≧▽≦) -----\n"
             "Track 1\n"
-            "UP 1 · 12.3万播放\n\n"
+            "UP 1 · 12.3万播放\n"
+            "--------------------------\n"
             "https://www.bilibili.com/video/BV0000000001",
         )
         self.assertEqual(await self.repository.get_recent_recommendation_ids("stream-a", 1), [track.id])

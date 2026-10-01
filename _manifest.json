@@ -1,13 +1,13 @@
 {
   "manifest_version": 2,
-  "version": "0.1.0",
-  "name": "中v推荐",
-  "description": "可在群内以b站链接形式发送v曲",
+  "version": "0.2.0",
+  "name": "中文 Vocaloid 推荐",
+  "description": "在 QQ 群中收录、随机推荐和管理中文 Vocaloid B 站投稿",
   "author": {
     "name": "welken",
     "url": "https://github.com/welken1405057126"
   },
-  "license": "GPL-v3.0-or-later",
+  "license": "GPL-3.0-or-later",
   "urls": {
     "repository": "https://github.com/welken1405057126/maibot-chinese-vocaloid-recommender"
   },

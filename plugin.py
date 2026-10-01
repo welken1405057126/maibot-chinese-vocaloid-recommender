@@ -344,7 +344,7 @@ class ChineseVocaloidRecommenderPlugin(MaiBotPlugin):
             "== 中v曲库 ==\n"
             "/来首中v、/随机中v、/中v随机：随机一首中v\n"
             "/上传中v <B站链接或BV号>：收录曲目\n"
-            "/中v删除 <ID>：删除自己上传的曲目\n"
+            "/中v删除 <ID>：删除有权限管理的曲目\n"
             "/中v帮助：显示本说明"
         )
         await self.ctx.send.text(text, stream_id)
